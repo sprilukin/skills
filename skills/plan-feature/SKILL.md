@@ -354,6 +354,10 @@ feature (or a major sub-component of it), THEN and only then:
   Phase 0 — prefer URLs already referenced in `AGENTS.md` or `README.md`.
 - If still nothing, use `websearch` for community best practices.
 - Cite every external source with its URL.
+- If a doc can't be fetched (network blocked, auth-walled), record the gap
+  explicitly in the plan's _Best practices researched_ section and flag the
+  affected decision as needing verification during implementation. Never
+  silently assume.
 
 ### Phase 3 — Dependency / impact analysis
 
@@ -530,8 +534,8 @@ uncommitted. Present exactly these four options to the user:
 >   branch, a sub-agent launched in it running the implement skill
 >   (`implement-ticket` for single tickets, `implement-ticket` epic mode for
 >   epics) instead of handing the user a copy-pasteable command. Requires a
->   worker-capable harness; if the harness preflight fails, fall back to
->   option C and say so.
+>   worker-capable harness; if the harness or `worker-delegation` preflight
+>   fails, report the error and stop — do not silently fall back to option C.
 
 Do not proceed to Phase 6 until the user picks A, B, C, or D. Then apply the
 selected option:

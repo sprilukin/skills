@@ -148,9 +148,9 @@ batching several steps into one dispatch is allowed per the
   model-failure procedure.
 - **Model-default gate.** When the harness declares `model-pinning`, the
   preflight's model-default gate applies to sub-worker dispatches too: this
-  coordinator's own model must match the configured sub-agent default (and
-  any `REQUIRED_MODEL` pin in this agent's task spec) before the first
-  sub-worker dispatch; on mismatch, stop and report per `worker-delegation`.
+  coordinator's own model must match the configured sub-agent default before
+  the first sub-worker dispatch; on mismatch, stop and report per
+  `worker-delegation`.
 - **Reviewer and explorer sub-workers must not modify files** (`MAY modify
   files: no`). Only `implementer` sub-workers may change code.
 

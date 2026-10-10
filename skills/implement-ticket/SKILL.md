@@ -23,6 +23,13 @@ authentication is unavailable, stop and tell the user what must be fixed.
 Never fall back to a generic subagent substitute, bare shell, raw terminal
 input, or inline work.
 
+### What this skill keeps vs. delegates
+
+| Owned by                      | Decisions                                                                                                                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| This skill (the WHAT)         | Which ticket/epic and mode, plan parsing, step roles, task-spec content, expected files, wait/harvest outcomes, verification order, review/commit/PR/CI gating, completion gates.                 |
+| `worker-delegation` (the HOW) | Harness detection and precedence, preflight, dispatch mechanics and flags, batching/parallel rules, slugs/titles/timeouts, wait/harvest discipline, recovery dispatches, completion proof format, PR body and title contract, testing obligations. |
+
 ## Mode routing (resolve once, at load)
 
 Exactly one mode applies. Resolve it from the invocation — never from
@@ -145,7 +152,10 @@ discipline, and recovery — as follows:
 Read the command slots from `.agents/project.yaml` and run the ticket's
 verification commands, or the profile `commands` slots, in this order:
 `lint`, `typecheck`, `format_check`, and `test`; include the `e2e` command
-per the `test_layers` slot, respecting each layer's declared policy. The
+per the `test_layers` slot, respecting each layer's declared policy. Run a
+slot only when the language/toolchain actually has that step — e.g. skip
+`typecheck` when the language has no separate typecheck command — but a
+typecheck step that exists must never be skipped. The
 coordinator may run these read-only/check-mode commands itself. A failure
 requires a fresh implementer fix (per `worker-delegation` recovery) followed
 by verification again. Do not commit with a failure.

@@ -186,8 +186,7 @@ Run the harness file's preflight once per session, before the first
 dispatch. This includes daemon/app status, provider availability and
 diagnostics, and — when the harness declares `model-pinning` — the
 model-default gate (the coordinator's own model must match the configured
-sub-agent default, and any `REQUIRED_MODEL` pin carried by the invocation
-prompt). Never print credentials, tokens, or secret configuration. Stop
+sub-agent default). Never print credentials, tokens, or secret configuration. Stop
 before the first dispatch on any preflight failure with a precise report of
 what must be installed, configured, or signed in. If a provider is available
 but a specific model fails authentication at runtime, do not blindly retry:
@@ -398,10 +397,15 @@ Formatting and creation rules:
   implications, schema changes, and migrations explicitly when relevant.
 - Before creating the PR, inspect the body file: `grep -nF '\n' "$PR_BODY"`
   must find nothing (literal escaped newlines), else rewrite the body.
-- Create with `gh pr create --title ... --body-file "$PR_BODY"`, then verify
-  the rendered body with `gh pr view <url> --json body --jq .body` (rendered,
-  not raw JSON). Repair with `gh pr edit` and re-verify if sections are
-  missing or newlines were mangled.
+- Create with
+  `gh pr create --title "[#<number>] <commit subject>" --body-file "$PR_BODY"`
+  — `<number>` is the linked ticket number (a sub-ticket's own number for
+  epic child PRs, the epic number for the final epic PR) and
+  `<commit subject>` is the short imperative subject of the primary commit.
+  Then verify the rendered body with
+  `gh pr view <url> --json body --jq .body` (rendered, not raw JSON). Repair
+  with `gh pr edit` and re-verify if sections are missing or newlines were
+  mangled.
 - Autonomous workers never merge PRs and never close issues — unless the
   invoking skill explicitly grants that authority to a named role (only the
   epic coordinator currently has it).
@@ -429,3 +433,26 @@ obligations, adjusted to what project discovery found:
 
 If a worker omits required tests, the supervisor dispatches a follow-up
 `implementer` task to add them — never adds them inline.
+
+### E2E browser verification (conditional)
+
+Apply this section only when **both** hold; skip it entirely otherwise:
+
+- the project declares an e2e test layer (e.g. profile `test_layers`), and
+- the session exposes a browser tool (e.g. Playwright MCP or an equivalent).
+
+The e2e layer may provide a persisted authenticated storage state for manual
+browser verification of the golden path. To use it:
+
+1. Resolve the e2e layer's location and config from the profile's
+   `test_layers` slot (probe and announce the assumption if absent).
+2. Ensure global setup has run so the storage state exists (consult the
+   project's testing docs for the exact command).
+3. After the e2e tests pass, use the browser tool to navigate the app and
+   manually verify the flow — the session is authenticated automatically
+   when the storage state exists. This is supervisor-side verification;
+   record browser findings in the verification record.
+4. To verify anonymous behavior, clear cookies or use an incognito context.
+
+Never paste storage-state contents or session values into worker prompts;
+see the project's testing docs for the full storageState details.

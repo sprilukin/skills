@@ -23,7 +23,7 @@ rules.
 | `placement`          | yes       | Paseo worktree workspaces (`create_workspace`).              |
 | `question-channel`   | yes       | `send_agent_prompt` (worker resumes in existing conversation).|
 | `async-notification` | yes       | `notifyOnFinish` on `create_agent` / background `send_agent_prompt`. |
-| `model-pinning`      | yes       | Model-default gate below; `REQUIRED_MODEL` pin honored.      |
+| `model-pinning`      | yes       | Model-default gate below.                                    |
 
 ## Authority: this file vs the installed `paseo` skill
 
@@ -95,12 +95,6 @@ providers. It is an execution/runtime choice, not a product provider choice.
      `paseo reload`, then re-invoke the skill. Never edit
      `~/.paseo/config.json` autonomously, never proceed on mismatch, never
      switch providers, and never fall back to inline work.
-8. **Pinned model (`REQUIRED_MODEL`).** When the invocation prompt or task
-   spec carries a `REQUIRED_MODEL=<full model id>` line, the coordinator pins
-   its checks to that id: its own model must equal `REQUIRED_MODEL`, and the
-   step-7 config default must equal `REQUIRED_MODEL` as well. Either mismatch
-   stops the run with the step-7 report-and-reload instructions before any
-   dispatch or side effect; the pin never replaces the config-default check.
 
 ## Dispatch mechanics
 
