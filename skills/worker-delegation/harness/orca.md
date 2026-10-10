@@ -5,12 +5,43 @@ Recipe for the [Orca](https://orca-app.dev) harness when
 
 ## Detection
 
+Orca injects a distinctive `ORCA_*` environment-variable set into every
+terminal pane it manages, so detection reads the session environment — the
+same approach other agent harnesses use (Claude Code's `CLAUDECODE=1`,
+Cursor's `CURSOR_TRACE_ID`, VS Code's `TERM_PROGRAM=vscode`).
+
 Positive evidence, checked in order — the first match wins:
 
-1. The session is an Orca-managed agent (spawned inside an Orca terminal or
-   Orca worktree context).
-2. The `orca` CLI is present (`command -v orca`) and the Orca desktop app is
-   reachable (per the `orca-cli` skill's status check).
+1. **Primary signal:** `ORCA_PANE_KEY` is set. This is Orca's pane identity
+   (`<tabId>:<paneId>`); Orca's own managed hook scripts and status
+   extensions gate on it, and it is injected into every agent terminal pane.
+2. **Corroborating signals:** at least one of `ORCA_TAB_ID`,
+   `ORCA_TERMINAL_HANDLE`, `ORCA_WORKTREE_ID`, `ORCA_WORKSPACE_ID`,
+   `ORCA_AGENT_LAUNCH_TOKEN`, `ORCA_AGENT_HOOK_ENDPOINT`/`_PORT`/`_TOKEN`,
+   `ORCA_APP_VERSION`, or `ORCA_USER_DATA_PATH` is set. Corroborating
+   signals without the primary signal are **ambiguous** — stop and ask the
+   user; do not conclude Orca.
+
+Never count any of these as detection evidence:
+
+- `ORCA_PI_STATUS_OWNED` — self-set by the orca-pi status extension at load
+  in any terminal, including outside Orca.
+- `orca` CLI presence (`command -v orca`) or a successful `orca status` —
+  that only proves the Orca app is running on this machine, not that this
+  session lives in an Orca pane. CLI presence and reachability are the
+  session-setup runtime verification (step 1 below), not detection.
+- Endpoint files under `~/Library/Application Support/orca/agent-hooks/` —
+  app-level state with the same limitation.
+
+Leak caveat: shells spawned from inside an Orca pane (a nested terminal, an
+SSH session from an Orca shell) inherit the `ORCA_*` set. Child agents
+legitimately inherit it from their parent Orca session, but an unrelated
+terminal launched from an Orca pane would also match. When it matters,
+cross-check: the path suffix of `ORCA_WORKTREE_ID`/`ORCA_WORKSPACE_ID`
+(`<repoId>::<path>`) must match the enclosing Orca worktree of the current
+working directory (`orca worktree list --json`, or the CLI's `active`
+selector inferred from cwd). A mismatch is an ambiguity: stop and ask the
+user.
 
 If evidence is ambiguous, stop and ask the user per the protocol's detection
 rules.

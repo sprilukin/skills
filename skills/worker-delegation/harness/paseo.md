@@ -11,7 +11,10 @@ Positive evidence, checked in order — the first match wins:
 2. The session toolset exposes the Paseo MCP tools (`create_agent`,
    `send_agent_prompt`, `list_agents`, `create_workspace`, `list_workspaces`,
    `list_providers`, `list_models`, `inspect_provider`, `list_profiles`).
-3. `paseo status` reports a running daemon.
+3. `paseo status` reports a running daemon — **corroborating only:** a
+   running daemon proves the Paseo app runs on this machine, not that this
+   session lives inside Paseo. Daemon status alone is **ambiguous** — stop
+   and ask the user; do not conclude Paseo.
 
 If evidence is ambiguous, stop and ask the user per the protocol's detection
 rules.
