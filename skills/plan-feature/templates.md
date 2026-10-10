@@ -1,14 +1,14 @@
-# Plan body templates (plan-feature-paseo)
+# Plan body templates (plan-feature)
 
-This file holds the two GitHub issue body templates that `plan-feature-paseo`
+This file holds the two GitHub issue body templates that `plan-feature`
 produces. `SKILL.md` owns the workflow; this file owns the exact body
-structure. `implement-ticket-paseo` parses published bodies that follow these
+structure. `implement-ticket` parses published bodies that follow these
 templates.
 
 - Use the **single-ticket template** for simple features.
 - Use the **epic template** when the complexity assessment produced a split.
   The epic body uses the epic sections; every child issue body follows the
-  single-ticket template so `implement-ticket-paseo` can parse it
+  single-ticket template so `implement-ticket` can parse it
   independently.
 
 ---
@@ -172,7 +172,7 @@ remain.
 ## Epic template
 
 The epic body uses the sections below. Each child issue body follows the
-single-ticket template so `implement-ticket-paseo` can parse it independently.
+single-ticket template so `implement-ticket` can parse it independently.
 
 ````markdown
 # <Exact epic issue title, including the `Epic:` prefix>
@@ -303,7 +303,7 @@ sub-tickets touch different spec files.
 
 Each sub-ticket below becomes a separate GitHub issue linked to the epic via
 `--parent`. The plan body for each sub-ticket must be self-contained so
-`implement-ticket-paseo` can parse it without reading the epic. Use the stable
+`implement-ticket` can parse it without reading the epic. Use the stable
 key and exact title in every definition heading. The child issue body must use
 the single-ticket template with the exact title as its H1. Add the stable key
 immediately below the H1:

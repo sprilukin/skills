@@ -8,9 +8,21 @@ description: "Use when the user wants to plan a feature/improvement and produce 
 Turn a free-form feature/improvement idea into a reviewed plan saved as a
 GitHub ticket. Complex features are automatically detected and proposed to
 be split into an epic with sub-tickets linked via GitHub's native sub-issue
-feature. **Do NOT implement.** This skill ends when the ticket(s) exist.
+feature. **Do NOT implement.** This skill ends when the ticket(s) exist
+(or, for Phase 5.5 option D, when the implementation handoff has been
+dispatched and accepted).
 Every generated plan must be decision-complete: an implementation agent must
 be able to execute it without asking a product or technical question.
+
+The plan body templates live in [templates.md](templates.md); this file owns
+the workflow. `implement-ticket` parses published bodies that follow those
+templates.
+
+Research, impact analysis, and other delegated steps in this skill follow
+the **worker-delegation** skill: it owns harness detection, dispatch
+mechanics, batching, wait/harvest discipline, and recovery. When this skill
+and `worker-delegation` disagree on delegation mechanics, `worker-delegation`
+wins.
 
 ## Workflow
 
@@ -196,7 +208,7 @@ Check each complexity signal:
 
 **If 2+ signals match AND the user hasn't already proposed splitting:**
 
-Ask using the `question` tool:
+Ask the user (one question, with a recommended answer):
 
 > This feature looks complex enough to split into an epic with sub-tickets.
 > Should I break it into multiple tickets linked via GitHub's sub-issue
@@ -252,8 +264,7 @@ analysis, draft an epic breakdown:
    Include each stable key exactly once, paired with its exact title.
    Sub-tickets with no blockers are first; dependent ones follow.
 
-Present the breakdown to the user for review using the `question` tool or
-direct text. The user can:
+Present the breakdown to the user for review. The user can:
 
 - **Confirm** → proceed to Phase 2 (research scoped per sub-ticket)
 - **Edit** (add/remove/reorder sub-tickets) → update and proceed
@@ -270,22 +281,25 @@ references together. After the first GitHub issue is created, keys, titles,
 scope, and dependency edges are immutable for that epic; stop and revise the
 epic deliberately if they need to change.
 
-### Phase 2 — Research best practices & spec conformance (delegate to `explore` subagent)
+### Phase 2 — Research best practices & spec conformance (dispatch an `explore` worker)
 
 **Epic mode:** If Phase 1.6 was executed, pass the approved sub-ticket list
-to the `explore` subagent. Scope research to each sub-ticket's files and
+to the `explore` worker. Scope research to each sub-ticket's files and
 spec areas. Return findings **grouped by sub-ticket** so they can be used
 directly in each sub-ticket's plan.
 
 **Single-ticket mode:** Research the feature as a whole (default behavior
 below).
 
-Launch the `explore` subagent with thoroughness `very thorough`. Do not pass
-it a bulk dump of Phase 0 context or cached documents. Pass the context map's
-paths, discovery commands, search strategy, applicable repository guidance
-locations, and (if in epic mode) the approved sub-ticket list. Instruct it to
-build the relevant context itself, starting with searches and reading only
-matching resources. Ask it to:
+Dispatch a read-only `explore` worker through the **worker-delegation**
+contract (role `explore`, `MAY modify files: no`, a readable kebab-case slug
+such as `explore-<feature-area>`, with the research brief below as the task
+spec). Prefer thoroughness in the brief. Do not pass it a bulk dump of
+Phase 0 context or cached documents. Pass the context map's paths, discovery
+commands, search strategy, applicable repository guidance locations, and (if
+in epic mode) the approved sub-ticket list. Instruct it to build the relevant
+context itself, starting with searches and reading only matching resources.
+Ask it to:
 
 1. Search the project's mapped source directories for established patterns
    relevant to the feature (file structure, helpers, utilities, conventions).
@@ -324,8 +338,17 @@ matching resources. Ask it to:
    plan as an unresolved item.
    **In epic mode:** organize (a)-(e) per sub-ticket.
 
-If `explore` reports **no established local pattern** for the feature (or a
-major sub-component of it), THEN and only then:
+Cross-validate the worker's report per the `worker-delegation` wait/harvest
+discipline before relying on it.
+
+**Inline fallback (only when no worker capability exists).** Only when the
+detected harness has no worker capability at all (no sub-agent mechanism of
+any kind), perform the research inline in this session instead — this is the
+sole sanctioned exception to the no-inline rule, and it must be announced to
+the user. If the harness has a worker capability, the dispatch is mandatory.
+
+If the explore findings report **no established local pattern** for the
+feature (or a major sub-component of it), THEN and only then:
 
 - Use `webfetch` on official docs for the relevant platform(s) detected in
   Phase 0 — prefer URLs already referenced in `AGENTS.md` or `README.md`.
@@ -435,12 +458,13 @@ gate:
   `SUBTICKET` value is the native issue number or URL of the first child in
   the approved implementation order; this is a deterministic activation
   witness, not a replacement for the stable-key graph or the per-child gate
-  that `implement-epic` injects into each dispatched task specification.
+  that the `implement-ticket` epic coordinator injects into each dispatched
+  task specification.
 - Replace all content placeholders before showing the final plan. The only
   placeholders permitted before GitHub issue creation are the publication
   metadata values for issue numbers and URLs, including the epic activation
   gate; Phase 6 must replace them before the epic is considered ready for
-  `implement-epic`.
+  `implement-ticket` epic mode.
 - Scan the proposed plan for unresolved markers, including `TBD`, `TODO`,
   `unknown`, `to be decided`, `user to decide`, `choose later`, and question
   marks used as unanswered questions.
@@ -469,7 +493,9 @@ Validate the generated OpenSpec change:
 openspec validate "<change-name>" --strict
 ```
 
-Produce the plan body using the applicable template below. The plan embeds the OpenSpec change name, summary, and links to local change artifacts.
+Produce the plan body using the applicable template in
+[templates.md](templates.md). The plan embeds the OpenSpec change name,
+summary, and links to local change artifacts.
 
 Show the plan to the user. **Iterate** based on feedback — do NOT skip this
 step and do NOT create the ticket(s) until the user explicitly approves the
@@ -482,8 +508,7 @@ revised plan.
 This phase always runs after the plan is approved, before any ticket is
 created. At this point the OpenSpec change artifacts under
 `openspec/changes/<change-name>/` exist locally and are typically
-uncommitted. Present exactly these four options to the user using the
-`question` tool:
+uncommitted. Present exactly these four options to the user:
 
 > The OpenSpec change artifacts are uncommitted. How should I handle them
 > before creating the ticket?
@@ -499,13 +524,14 @@ uncommitted. Present exactly these four options to the user using the
 >   files to that branch, and remove the local uncommitted artifacts from
 >   the `main` working tree. The ticket will state that all work happens on
 >   that branch.
-> - **D) Feature branch + Orca subagent** — everything in C, then also
->   spawn an Orca-managed worktree checked out on that branch, launch a
->   `pi` subagent in it, and start the implement skill in that subagent
->   (`/skill:implement-ticket` for single tickets, `/skill:implement-epic`
->   for epics) instead of handing the user a copy-pasteable command.
->   Requires the Orca desktop app running and the `orca` CLI available; if
->   either is missing, fall back to option C and say so.
+> - **D) Feature branch + implementation handoff** — everything in C, then
+>   also dispatch a fire-and-forget implementation handoff through the
+>   worker-delegation skill: a worktree-based placement checked out on that
+>   branch, a sub-agent launched in it running the implement skill
+>   (`implement-ticket` for single tickets, `implement-ticket` epic mode for
+>   epics) instead of handing the user a copy-pasteable command. Requires a
+>   worker-capable harness; if the harness preflight fails, fall back to
+>   option C and say so.
 
 Do not proceed to Phase 6 until the user picks A, B, C, or D. Then apply the
 selected option:
@@ -613,69 +639,66 @@ For both methods:
   **before** creating sub-tickets so every child body already names the
   branch.
 - Do not check out the new branch locally afterwards — leave it
-  un-checked-out so the implementer (or a worktree in `implement-epic`) can
-  check it out fresh.
+  un-checked-out so the implementer (or a worktree placement in the epic
+  coordinator) can check it out fresh.
 - The ticket body's `OpenSpec Change` section must name the branch and state
   that **all implementation happens on this branch, not on `main`**. In epic
   mode, state this in the epic body and in every sub-ticket body.
 
-**Option D — feature branch plus Orca subagent (performed in Phase 6,
-after the Option C procedure):**
+**Option D — feature branch plus implementation handoff (performed in
+Phase 6, after the Option C procedure):**
 
 Performs all of Option C (ticket/epic first, branch carrying the OpenSpec
 artifacts, local rollback, `Working branch` write-back), then additionally
-starts implementation immediately: hand the launch off to the `orca-cli`
-skill, which spawns a detached Orca-managed worktree checked out on the
-working branch, launches a `pi` subagent in it, and invokes the implement
-skill there. Do not embed raw `orca` command sequences here — the `orca-cli`
-skill loads the version-matched CLI guide at runtime and owns all
-command-level details. The current session never runs the implement skill
-itself — the Orca subagent owns the implementation. Requires the Orca
-desktop app running and the `orca` CLI available; if either is missing,
-report the error and stop — do not silently fall back to option C.
+starts implementation immediately as a **fire-and-forget handoff** per the
+worker-delegation skill: resolve the harness per its detection rules, then
+run the harness file's fire-and-forget handoff recipe — a worktree-based
+placement checked out on the working branch, a sub-agent launched in it,
+and the implement skill invoked there. Do not embed harness command
+sequences here — the harness file owns all command-level details. The
+current session never runs the implement skill itself — the dispatched
+sub-agent owns the implementation and becomes the supervisor of any further
+delegation. Requires a worker-capable harness; if the worker-delegation
+preflight fails, report the error and stop — do not silently fall back to
+option C.
 
 Handoff timing (run in Phase 6 — single-ticket mode: right after step 3's
 branch push and `Working branch` write-back; epic mode: after the step 8
-body verification, so `implement-epic` never starts before the children are
-published):
+body verification, so the epic coordinator never starts before the children
+are published):
 
-Invoke the `orca-cli` skill with a full ownership handoff (create the
-worktree, launch the agent, deliver the prompt, stop supervising), passing
-this brief as the task:
+Dispatch the fire-and-forget handoff with this brief as the worker prompt:
 
 - First run `git fetch origin` in the current checkout — the working-branch
   ref must exist locally before worktree creation or the checkout fails.
-- Create a new Orca worktree for repo `<repoId>` named `<N>-<slug>`, linked
-  to GitHub issue `<N>`. Prefer root-level sidebar placement (no parent
-  lineage) unless the user asked for it to be parented under the current
-  worktree. Repo setup hooks should run so dependencies are installed for
-  later test runs.
-- The worktree MUST end up checked out on the working branch
-  `feature/<N>-<slug>` (single ticket) or `epic/<N>-<slug>` (epic). Orca's
-  create-time base option cannot do this — it creates a NEW branch
-  `feature/<worktree-name>` from the ref — so the branch must be checked
-  out explicitly inside the new worktree after creation (`git switch
-<branch>` DWIM-tracks `origin/<branch>`).
-- Launch a default `pi` agent in that worktree and send this command
-  exactly once (re-sending the same command queues a duplicate steering
-  message in the agent's queue):
+- Create a new worktree-based placement for repo `<repoId>` named `<N>-<slug>`
+  (harness naming per the harness file), linked to GitHub issue `<N>`.
+  Prefer root-level placement (no parent lineage) unless the user asked for
+  it to be parented under the current context. Repo setup hooks should run so
+  dependencies are installed for later test runs.
+- The placement MUST end up checked out on the working branch
+  `feature/<N>-<slug>` (single ticket) or `epic/<N>-<slug>` (epic). Verify
+  the checked-out branch inside the new placement after creation (`git
+  switch <branch>` DWIM-tracks `origin/<branch>`).
+- Launch the harness's default worker agent in that placement and send this
+  command exactly once (re-sending the same command queues a duplicate
+  steering message in the agent's queue):
   - single-ticket: `/skill:implement-ticket <ticket-title>`
-  - epic mode: `/skill:implement-epic <epic-number>`
-- Verify acceptance by reading the terminal (skill loaded, turn started),
-  not by re-sending.
-- Set the workspace-card comment `<skill> started on <branch>` and report
-  the worktree path, branch, and subagent terminal to the user.
-- Then stop: a handoff is done when the new worktree id and agent handle
-  have been reported and the send receipt was accepted. Do not supervise,
-  monitor, or wait for the subagent, and never also run the implement skill
+  - epic mode: `/skill:implement-ticket <epic-number>`
+- Verify acceptance by reading the worker's initial output (skill loaded,
+  turn started), not by re-sending.
+- Report the placement path, branch, and sub-agent handle to the user.
+- Then stop: a handoff is done when the new placement id and worker handle
+  have been reported and the prompt delivery was accepted. Do not supervise,
+  monitor, or wait for the sub-agent, and never also run the implement skill
   in the current session for the same ticket/epic.
 - Never paste secret values into prompts — the command references only the
-  ticket/epic number; the subagent reads issue bodies from GitHub.
+  ticket/epic number; the sub-agent reads issue bodies from GitHub.
 
 After applying the option: for A and B, set the plan body's `Working branch`
 line to `main` before creating tickets in Phase 6. For C and D, the branch
 name (embedding the ticket number) is resolved in Phase 6 after the ticket
-exists and is written back with `gh issue edit`; for D the `orca-cli`
+exists and is written back with `gh issue edit`; for D the fire-and-forget
 handoff follows the branch write-back per the timing above.
 
 ### Phase 6 — Create the GitHub ticket(s)
@@ -701,16 +724,17 @@ handoff follows the branch write-back per the timing above.
    plan body with the actual branch name and publish it via
    `gh issue edit <N> --body-file`. For options A/B the `Working branch`
    line already says `main` and this step is skipped.
-4. **Option D (Phase 5.5): start the subagent.** If Phase 5.5 selected
-   option D, run the Option D handoff via the `orca-cli` skill from Phase
-   5.5 with the working branch `feature/<N>-<slug>` and the command
+4. **Option D (Phase 5.5): dispatch the handoff.** If Phase 5.5 selected
+   option D, run the Option D fire-and-forget handoff from Phase 5.5 with
+   the working branch `feature/<N>-<slug>` and the command
    `/skill:implement-ticket <ticket-title>` (the exact title confirmed in
    step 1), immediately after step 3's branch push and `Working branch`
    write-back.
 5. Tell the user the ticket is ready. If option D was selected, report that
-   implementation was already started in the Orca subagent (worktree path,
-   branch, subagent terminal) and skip the copy-pasteable command. Otherwise
-   provide a copy-pasteable command to start implementation:
+   implementation was already started in the dispatched sub-agent
+   (placement path, branch, worker handle) and skip the copy-pasteable
+   command. Otherwise provide a copy-pasteable command to start
+   implementation:
    ```
    /skill:implement-ticket <ticket-title>
    ```
@@ -795,431 +819,38 @@ handoff follows the branch write-back per the timing above.
    native child in implementation order, the graph declares every key exactly
    once, the order declares every key exactly once and is topological, and no
    publication or template placeholders remain. If any check fails, do not
-   recommend `implement-epic`; repair and re-fetch first.
+   recommend starting the `implement-ticket` epic coordinator; repair and
+   re-fetch first.
 7. Do not apply any labels automatically. The user can add labels afterwards.
 8. Confirm the published epic and child bodies match the approved plan
    content and contain no publication placeholders or template metadata.
 9. Tell the user the epic and sub-tickets are ready. Show the epic URL and
    list all sub-ticket numbers. If Phase 5.5 selected option D, run the
-   Option D handoff via the `orca-cli` skill from Phase 5.5 with the
-   working branch `epic/<N>-<slug>` and the command
-   `/skill:implement-epic <epic-number>` (after the step 8 verification, so
-   `implement-epic` never starts before the children are published), and
-   report the worktree path and branch instead of a copy-pasteable command.
-   Otherwise provide the autonomous epic command:
+   Option D fire-and-forget handoff from Phase 5.5 with the working branch
+   `epic/<N>-<slug>` and the command `/skill:implement-ticket <epic-number>`
+   (after the step 8 verification, so the epic coordinator never starts
+   before the children are published), and report the placement path and
+   branch instead of a copy-pasteable command. Otherwise provide the
+   autonomous epic command:
    ```
-   /skill:implement-epic <epic-number>
+   /skill:implement-ticket <epic-number>
    ```
    The epic number or URL is the preferred selector because it avoids an
-   ambiguous title search. The `implement-epic` skill will dispatch children
-   in the validated dependency order and must not be replaced with separate
-   direct `implement-ticket` invocations for this epic.
-
-## Plan file template
-
-The plan file MUST follow this template exactly so `implement-ticket` can
-parse it later.
-
-**Use the single-ticket template for simple features.** Use the **epic
-template** (with `## Epic structure` and `## Sub-ticket definitions`) when
-Phase 1.6 produced a split. The epic template replaces `## Implementation
-plan` with per-sub-ticket plans that are each self-contained for
-`implement-ticket`.
-
-### Single-ticket template
-
-```markdown
-# <Exact issue title>
-
-## Context
-
-### Problem
-
-<What's broken, missing, or painful? What triggered this? (user request, bug
-report, business requirement, tech debt, observed friction). 2-3 sentences.
-Omitted if the user skipped this.>
-
-### Current state (Before)
-
-<What exists today and its limitations. "Nothing exists" if this is
-greenfield. 1-3 sentences. Omitted if the user skipped this.>
-
-### Proposed change (After)
-
-<What will exist after, in plain language — not implementation details.
-1-3 sentences. Omitted if the user skipped this.>
-
-## Decision rationale
-
-<Why this approach was chosen. What alternatives were considered and rejected.
-Any constraints that shaped the decision (platform, existing patterns, time,
-dependencies). 3-6 sentences. Omitted if the user skipped this.>
-
-## Implementation decisions
-
-List every implementation-affecting decision that an autonomous implementer
-must follow. For each item, state the selected approach and its basis. Include
-scope boundaries, defaults, spec-drift resolutions, and rejected alternatives
-where they matter. Do not include unanswered questions or unselected options.
-
-## Related context
-
-- Related issues: #X, #Y
-- PRs: #Z
-- Discussion: <link or description>
-- User feedback: <link or description>
-
-(Omit this entire section if nothing to link.)
-
-## Best practices researched
-
-<Summary of patterns found in the codebase and/or external docs. Include
-`file_path:line_number` references for local patterns and URLs for external
-sources.>
-
-## Dependencies / impact
-
-- **Source files:** <paths>
-- **Tests:** <paths or "none">
-- **Spec docs:** <paths — see "Spec changes" below>
-- **Docs:** <paths or "none">
-- **Infrastructure:** <IaC files, env var NAMES only, or "none">
-- **Database:** <schema/migration changes or "none">
-
-## OpenSpec Change
-
-- **Change name:** `<change-name>`
-- **Artifacts:** `openspec/changes/<change-name>/` (`proposal.md`, `specs/`, `design.md`, `tasks.md`)
-- **Working branch:** <branch all implementation happens on — `main` for
-  Phase 5.5 options A/B, `feature/<N>-<slug>` for option C (where `N` is
-  this issue's number, filled in after ticket creation); for option C state
-  explicitly that work must happen on this branch and must not be merged to
-  `main` mid-implementation. For option A note the artifacts are local-only
-  and the implementer commits them with the implementation.>
-
-## Spec changes
-
-> Canonical capability specs in `openspec/specs/` are the single source of truth
-> for what the app does. Every feature that adds or changes product behavior
-> MUST update these specs via OpenSpec delta specifications.
-
-List each planned spec change below. If the feature introduces no new or
-changed product behavior, write "None — no behavioral change."
-
-### New requirements
-
-For each new capability requirement:
-
-- **Capability & Requirement:** e.g. `<capability>` -> `<requirement>`
-- **Spec path:** `openspec/specs/<capability>/spec.md`
-- **Scenario:**
-  - **WHEN** <triggering user action or state>
-  - **THEN** <observable outcome>
-
-### Modified requirements
-
-For each existing requirement that changes:
-
-- **Capability:** e.g. `<capability>`
-- **Spec path:** `openspec/specs/<capability>/spec.md`
-- **Change:** <what changes — updated scenarios, new scenario, etc.>
-
-### Spec drift corrections
-
-List any mismatch found between the current code and the spec (from the
-Phase 2 conformance report). For each:
-
-- **Capability:** e.g. `<capability>`
-- **Mismatch:** <what the spec says vs. what the code does>
-- **Resolution:** <selected outcome: update spec | update code | both>
-
-## Implementation plan
-
-Ordered steps. Each step specifies which subagent to delegate to.
-
-### Step 1 — <name>
-
-- **Subagent:** `implementer` | `explore` | `reviewer`
-- **Task:** <one paragraph describing what to do>
-- **Files affected:** <paths>
-- **Delegation instructions:** <exact prompt to send to the subagent,
-  including constraints from "Best practices researched" above>
-
-### Step 2 — <name>
-
-...
-
-## Verification plan
-
-Before finalizing this section, research any new framework, library,
-platform, analyzer, or test tool introduced by the feature. Use applicable
-in-repo guidance first, then official documentation for the exact versions in
-the manifest; record relevant commands, limitations, and manual checks here
-and cite external URLs in **Best practices researched**. Do not add a tool
-merely because it is popular: use the repository's existing static-quality
-policy and the profile's `test_layers` unless the feature requires a new
-capability.
-
-- **Lint:** `<lint command — profile `commands.lint`, else manifest, or "n/a">`
-- **Typecheck:** `<typecheck command — profile `commands.typecheck`, else manifest, or "n/a">`
-- **Format:** `<format check command — profile `commands.format`, else manifest, or "n/a">`
-- **Static analysis:** `<static-quality command(s) from the profile, manifest, or project policy, or "n/a">`
-- **Tests:** `<test command — profile `commands.test`/`commands.e2e`, else manifest, or "no test changes">`
-- **Manual verification:** <steps to verify locally, or "n/a">
-
-## Rollback plan
-
-<If risky (see below): explicit rollback steps. Otherwise:
-"Not applicable — change is reversible via `git revert` and touches no
-DB/infra/auth/generated code.">
-
-## Decision completeness
-
-All implementation-affecting decisions were resolved before this plan was
-drafted. No unresolved questions, pending choices, or user-directed decisions
-remain.
-```
-
-### Epic template
-
-Use this template when the feature was split into an epic with sub-tickets.
-The epic body uses the sections below. Each child issue body follows the
-single-ticket template so `implement-ticket` can parse it independently.
-
-````markdown
-# <Exact epic issue title, including the `Epic:` prefix>
-
-## Autonomous execution gate
-
-```text
-AUTONOMOUS_EPIC_SUBTICKET
-PARENT_EPIC=_(filled in after ticket creation)_
-SUBTICKET=_(filled in after child issue creation; first child in implementation order)_
-```
-
-## Context
-
-### Problem
-
-<Same as single-ticket template.>
-
-### Current state (Before)
-
-<Same as single-ticket template.>
-
-### Proposed change (After)
-
-<Same as single-ticket template.>
-
-## Decision rationale
-
-<Same as single-ticket template.>
-
-## Implementation decisions
-
-List every implementation-affecting decision for the epic and each sub-ticket.
-For each item, state the selected approach and its basis. Include scope
-boundaries, defaults, spec-drift resolutions, dependency decisions, and
-rejected alternatives where they matter. Do not include unanswered questions
-or unselected options.
-
-## Related context
-
-<Same as single-ticket template.>
-
-## Epic structure
-
-### Sub-tickets
-
-- [ ] `S1` — <exact title> — <one-sentence scope>
-- [ ] `S2` — <exact title> — <one-sentence scope>
-- [ ] `S3` — <exact title> — <one-sentence scope>
-- ...
-
-### Dependency graph
-
-```
-Nodes:
-- `S1` — <exact sub-ticket title>
-- `S2` — <exact sub-ticket title>
-- `S3` — <exact sub-ticket title>
-
-Edges (blocker -> dependent):
-- `S1` -> `S2`
-- `S1` -> `S3`
-```
-
-Declare every node exactly once, including nodes with no edges. Write
-`- none` under Edges when all sub-tickets are independent. Stable keys are
-plan identities, not GitHub issue numbers.
-
-### Implementation order
-
-1. `S1` — <exact title> (no blockers)
-2. `S2` — <exact title> (depends on S1)
-3. `S3` — <exact title> (depends on S1)
-4. ...
-
-## Best practices researched
-
-<Patterns found, grouped by sub-ticket where applicable. Include
-`file_path:line_number` references.>
-
-## Dependencies / impact
-
-### Sub-ticket S1: <exact title>
-
-- **Source files:** <paths>
-- **Tests:** <paths or "none">
-- **Spec docs:** <paths>
-- **Docs:** <paths or "none">
-- **Infrastructure:** <IaC files, env var NAMES only, or "none">
-- **Database:** <schema/migration changes or "none">
-
-### Sub-ticket S2: <exact title>
-
-...
-
-## OpenSpec Change
-
-- **Change name:** `<change-name>`
-- **Artifacts:** `openspec/changes/<change-name>/` (`proposal.md`, `specs/`, `design.md`, `tasks.md`)
-- **Working branch:** <branch all implementation happens on — `main` for
-  Phase 5.5 options A/B, `epic/<N>-<slug>` for option C (where `N` is the
-  epic issue's number, filled in after epic creation); for option C state
-  explicitly that ALL sub-tickets are implemented on this shared epic branch.
-  Repeat this line in every sub-ticket body so each child is self-contained.>
-
-## Spec changes
-
-> Canonical capability specs in `openspec/specs/` are the single source of truth
-> for what the app does. Every feature that adds or changes product behavior
-> MUST update these specs via OpenSpec delta specifications.
-
-List spec changes across all sub-tickets. Group by sub-ticket if multiple
-sub-tickets touch different spec files.
-
-### New requirements
-
-<Same format as single-ticket template.>
-
-### Modified requirements
-
-<Same format as single-ticket template.>
-
-### Spec drift corrections
-
-<Same format as single-ticket template.>
-
-## Sub-ticket definitions
-
-Each sub-ticket below becomes a separate GitHub issue linked to the epic via
-`--parent`. The plan body for each sub-ticket must be self-contained so
-`implement-ticket` can parse it without reading the epic. Use the stable key
-and exact title in every definition heading. The child issue body must use the single-ticket template with the exact title
-as its H1. Add the stable key immediately below the H1:
-
-```markdown
-> Epic sub-ticket key: S1
-```
-
-Replace `S1` with that definition's key. The stable key is retained in the
-published child body; the GitHub issue and native parent relationship provide
-the publication identity.
-
-### Sub-ticket S1: <exact title>
-
-#### Context
-
-<Problem, Before, After — can be brief (1-2 sentences each), referencing
-the epic context above.>
-
-#### Implementation decisions
-
-List the selected implementation-affecting decisions for this sub-ticket.
-Include the basis for each decision and do not include unanswered questions or
-unselected alternatives.
-
-#### Implementation plan
-
-##### Step 1 — <name>
-
-- **Subagent:** `implementer` | `explore` | `reviewer`
-- **Task:** <one paragraph>
-- **Files affected:** <paths>
-- **Delegation instructions:** <exact prompt>
-
-##### Step 2 — <name>
-
-...
-
-#### Verification plan
-
-Before finalizing this section, research any new framework, library,
-platform, analyzer, or test tool introduced by the feature. Use applicable
-in-repo guidance first, then official documentation for the exact versions in
-the manifest; record relevant commands, limitations, and manual checks here
-and cite external URLs in **Best practices researched**. Do not add a tool
-merely because it is popular: use the repository's existing static-quality
-policy and the profile's `test_layers` unless the feature requires a new
-capability.
-
-- **Lint:** `<command or "n/a">`
-- **Typecheck:** `<command or "n/a">`
-- **Format:** `<command or "n/a">`
-- **Static analysis:** `<static-quality command(s) from the manifest/policy, or "n/a">`
-- **Tests:** `<command or "no test changes">`
-- **Manual verification:** <steps or "n/a">
-
-#### Rollback plan
-
-<If risky: explicit rollback steps. Otherwise: "Not applicable.">
-
-#### Decision completeness
-
-All implementation-affecting decisions for this sub-ticket were resolved
-before this plan was drafted. No unresolved questions, pending choices, or
-user-directed decisions remain.
-
----
-
-### Sub-ticket S2: <exact title>
-
-...
-
-## Verification plan (epic-level)
-
-Before finalizing this section, research any new framework, library,
-platform, analyzer, or test tool introduced by the feature. Use applicable
-in-repo guidance first, then official documentation for the exact versions in
-the manifest; record relevant commands, limitations, and manual checks here
-and cite external URLs in **Best practices researched**. Do not add a tool
-merely because it is popular: use the repository's existing static-quality
-policy and the profile's `test_layers` unless the feature requires a new
-capability.
-
-<Overall verification strategy that spans all sub-tickets. Typically:
-verify each sub-ticket individually, then do a final integration check.>
-
-- **Lint:** `<command>`
-- **Typecheck:** `<command>`
-- **Format:** `<command>`
-- **Static analysis:** `<static-quality command(s) from the manifest/policy>`
-- **Tests:** `<command>`
-- **Manual verification:** <end-to-end steps covering the full feature>
-
-## Rollback plan
-
-<If any sub-ticket is risky (see "Risky change detection"): describe the
-rollback for that sub-ticket. Otherwise:
-"Not applicable — all changes are reversible via `git revert`.">
-
-## Decision completeness
-
-All implementation-affecting decisions across the epic were resolved before
-this plan was drafted. No unresolved questions, pending choices, or
-user-directed decisions remain.
-````
+   ambiguous title search. The `implement-ticket` epic coordinator will
+   dispatch children in the validated dependency order and must not be
+   replaced with separate direct `implement-ticket` invocations for this
+   epic.
+
+## Plan body templates
+
+The plan body templates live in [templates.md](templates.md) and MUST be
+followed exactly so `implement-ticket` can parse published bodies later.
+
+- Use the **single-ticket template** for simple features.
+- Use the **epic template** (with `## Epic structure` and `## Sub-ticket
+  definitions`) when Phase 1.6 produced a split. The epic body uses the epic
+  sections; every child issue body follows the single-ticket template so
+  `implement-ticket` can parse it independently.
 
 ## Risky change detection
 
@@ -1242,7 +873,10 @@ For everything else, the rollback section can say "Not applicable".
 
 - Never skip the iteration step. Always show the draft and ask for feedback
   before creating the ticket.
-- Never start implementing. This skill ends when the ticket(s) exist.
+- Never start implementing. This skill ends when the ticket(s) exist (or,
+  for option D, when the fire-and-forget handoff has been dispatched and
+  accepted — the handoff must never be followed by running the implement
+  skill in this session).
 - Never paste real env/secret values into the plan. Use env var NAMES only.
 - Always cite external sources with URLs.
 - Always include `file_path:line_number` references for codebase patterns.
@@ -1279,8 +913,9 @@ For everything else, the rollback section can say "Not applicable".
   revised plan.
 - **Always ask how to handle uncommitted OpenSpec artifacts (Phase 5.5).**
   Present options A (ticket only), B (commit to `main`), C (feature branch
-  off fresh `origin/main`), and D (feature branch plus an Orca `pi`
-  subagent that immediately starts the implement skill in a new worktree)
+  off fresh `origin/main`), and D (feature branch plus a fire-and-forget
+  implementation handoff dispatched through worker-delegation, which
+  immediately starts the implement skill in a new worktree placement)
   before creating any ticket, and record the choice in the plan's
   `OpenSpec Change` section. Never commit or push
   OpenSpec artifacts, and never create branches, without the user's explicit
@@ -1309,7 +944,8 @@ For everything else, the rollback section can say "Not applicable".
 - **Epic mode: dependency graph required.** The dependency graph must be
   present in the epic plan body, must declare every child including isolated
   children, and must use stable keys rather than issue-number placeholders.
-  `implement-epic` validates the graph against the native `subIssues` set.
+  The `implement-ticket` epic coordinator validates the graph against the
+  native `subIssues` set.
 - **Epic mode: activation gate required.** The epic body must contain exactly
   one finalized block with this shape:
   ```text
@@ -1317,9 +953,10 @@ For everything else, the rollback section can say "Not applicable".
   PARENT_EPIC=<native epic number or URL>
   SUBTICKET=<first native child number or URL in implementation order>
   ```
-  `implement-epic` uses this block only to authorize the epic coordinator;
-  it still injects a separate child-specific block into every dispatched task
-  specification. Do not copy the epic block into child issue bodies.
+  The `implement-ticket` epic coordinator uses this block only to authorize
+  the epic coordinator; it still injects a separate child-specific block into
+  every dispatched task specification. Do not copy the epic block into child
+  issue bodies.
 - **Epic mode: create epic first.** Never create sub-tickets before the
   epic ticket exists — GitHub sub-issues need a parent to link to.
 - **Epic mode: use `--parent`.** Use `gh issue create --parent <epic-number>`
@@ -1329,4 +966,5 @@ For everything else, the rollback section can say "Not applicable".
   replace every publication issue/URL placeholder in the epic and child bodies
   with actual metadata and publish the bodies with `gh issue edit --body-file`.
   Re-fetch and verify the native child set, key/title mappings, graph, order,
-  and absence of placeholders before recommending `/skill:implement-epic`.
+  and absence of placeholders before recommending
+  `/skill:implement-ticket <epic-number>`.

@@ -26,26 +26,28 @@ Browse at [skills.sh/sprilukin/skills](https://skills.sh/sprilukin/skills).
 | ----- | ----------- |
 | [git-ops](skills/git-ops/) | Git & GitHub CLI operations — commits, branches, PRs. |
 | [plan-feature](skills/plan-feature/) | Plan a feature and produce a GitHub ticket (not implement it). |
-| [implement-ticket](skills/implement-ticket/) | Implement a GitHub ticket in user-gated mode via supervised delegation. |
-| [implement-epic](skills/implement-epic/) | Implement a GitHub Epic via autonomous delegation of its sub-issues. |
-| [implement-auto](skills/implement-auto/) | Autonomous worker for an Epic sub-ticket; commits, pushes, opens child PR. |
+| [implement-ticket](skills/implement-ticket/) | Implement a GitHub ticket or epic via mandatory sub-agent delegation. Mode routing: direct mode (user-gated), epic coordinator ([epic.md](skills/implement-ticket/epic.md)), autonomous sub-ticket worker ([autonomous.md](skills/implement-ticket/autonomous.md)). |
+| [worker-delegation](skills/worker-delegation/) | Harness-agnostic sub-agent delegation protocol used by the SDLC skills. Not triggered directly. |
 | [reviewer](skills/reviewer/) | Code review for bugs, security, performance, maintainability. Read-only. |
 | [summarizer](skills/summarizer/) | Summarize file contents, diffs, or changes. Read-only. |
 | [playwright-browser](skills/playwright-browser/) | Control and inspect browsers with the Playwright CLI. |
 
-### Paseo editions
+### Harness-agnostic SDLC skills
 
-The `-paseo` variants of the planning/implementation skills are adapted for
-[Paseo](https://paseo.app)-supervised delegation and require a running Paseo
-workspace:
+`plan-feature` and `implement-ticket` are harness-agnostic: they contain no
+harness-specific mechanics. All sub-agent spawning, waiting, harvesting, and
+recovery goes through [worker-delegation](skills/worker-delegation/), which
+detects the current harness and applies the matching recipe from its
+`harness/` directory:
 
-| Skill | Description |
-| ----- | ----------- |
-| [paseo-delegation](skills/paseo-delegation/) | Shared delegation protocol used by the `-paseo` skills. Not triggered directly. |
-| [plan-feature-paseo](skills/plan-feature-paseo/) | Plan a feature and produce a GitHub ticket (Paseo edition). |
-| [implement-ticket-paseo](skills/implement-ticket-paseo/) | Implement a GitHub ticket via Paseo-supervised delegation. |
-| [implement-epic-paseo](skills/implement-epic-paseo/) | Implement a GitHub Epic via autonomous Paseo-supervised delegation. |
-| [implement-auto-paseo](skills/implement-auto-paseo/) | Autonomous worker for an Epic sub-ticket (Paseo edition). |
+| Harness file | Environment |
+| ------------ | ----------- |
+| [harness/orca.md](skills/worker-delegation/harness/orca.md) | [Orca](https://orca-app.dev) app with the `orca` CLI and orchestration. |
+| [harness/paseo.md](skills/worker-delegation/harness/paseo.md) | [Paseo](https://paseo.app) app with the Paseo MCP tools / `paseo` CLI. |
+| [harness/native.md](skills/worker-delegation/harness/native.md) | Harnesses with first-class native sub-agents (passthrough). |
+
+Adding a new harness means adding one file under
+`skills/worker-delegation/harness/` — no changes to the SDLC skills.
 
 ## Layout
 
