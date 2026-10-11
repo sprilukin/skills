@@ -1,6 +1,6 @@
 ---
 name: worker-delegation
-description: "Worker delegation protocol for dispatching work to sub-agents/workers, harness-agnostically. Invoke BEFORE any dispatch, wait, or recovery: the SDLC skills (plan-feature, implement-ticket) require invoking it at every delegated step, and it is invoked directly when the user asks for a handoff or to spawn/delegate a worker. Continuation: when delegation is already underway in this session (a worker was dispatched or a preflight passed), skip harness detection and preflight and run only what this invocation needs. Detects the current harness (Orca, Paseo, or a harness with native sub-agents) and applies the harness-specific recipe from its harness/ directory. If it cannot be invoked, stop and ask the user — never dispatch from memory."
+description: "Worker delegation protocol for dispatching work to sub-agents/workers, harness-agnostically. Invoke BEFORE any dispatch, wait, or recovery: the SDLC skills (plan-feature, implement-ticket) require invoking it at every delegated step, and it is invoked directly when the user asks for a handoff or to spawn/delegate a worker. Detects the current harness (Orca, Paseo, or a harness with native sub-agents) and applies the harness-specific recipe from its harness/ directory. If it cannot be invoked, stop and ask the user — never dispatch from memory."
 ---
 
 # Worker Delegation Protocol
@@ -17,35 +17,6 @@ now, through the harness's skill-invocation mechanism, and follow it —
 never apply it from memory or from the invoking skill's summary. If this
 skill cannot be invoked, stop and ask the user. "Sub-agent" and "worker"
 are interchangeable in this protocol; the harness may use either term.
-
-## 0. Invocation modes: first invocation vs continuation
-
-Every invocation of this skill is exactly one of two modes. Determine the
-mode before doing anything else, and state which one you are in:
-
-- **First invocation** — no worker has been dispatched in this session and
-  no passed preflight report exists in the transcript. Run the full
-  protocol: harness detection (§1), preflight (§4), then the section the
-  invoking skill requires.
-- **Continuation** — a worker was already dispatched in this session, or a
-  passed preflight report is already present in the transcript. Skip §1
-  detection and preflight entirely. Run only what this invocation needs —
-  the §3 pattern the invoking skill names, plus dispatch (§4–§5),
-  wait/harvest (§6), or recovery (§7). Never
-  re-detect the harness, never re-run preflight, and never re-enter the
-  invoking skill's earlier phases to re-parse plans or re-read artifacts
-  already parsed in this session.
-
-A transient tool failure (wrong tool name, sandbox limitation, failed file
-read) never converts a continuation into a first invocation — see
-**Error triage** in §7.
-
-This section is mechanics owned by this skill: when an invoking skill's own
-text says to "run its preflight" or re-detect the harness at a later step,
-the mode rules above override it (see the preamble: when an invoking skill
-and this skill both describe delegation mechanics, this skill wins).
-Invocation mode is determined by session state, not by where
-in the invoking skill the invocation happens.
 
 ## 1. Authority and harness resolution
 
@@ -245,12 +216,7 @@ work.
 ### Preflight
 
 Run the harness file's preflight once per session, before the first
-dispatch. It is **idempotent**: before running it, check whether a passed
-preflight report already exists in this session's transcript; if it does,
-skip harness detection and preflight and go directly to the first dispatch.
-On pass, state the result explicitly in one line (e.g. "Preflight passed:
-daemon, provider, model default verified") so later continuations can find
-this report in the transcript. This includes daemon/app status, provider availability and
+dispatch. This includes daemon/app status, provider availability and
 diagnostics, and — when the harness declares `model-pinning` — the
 model-default gate (the coordinator's own model must match the configured
 sub-agent default). Never print credentials, tokens, or secret configuration. Stop
@@ -260,17 +226,6 @@ but a specific model fails authentication at runtime, do not blindly retry:
 diagnose per the harness file, select a working `provider/model` pair
 explicitly, re-validate, and tell the user which model failed and what
 replaced it.
-
-A preflight (pass or fail) is **terminal for the invocation**: the very next
-action must be the dispatch sequence of the invoking skill's chosen §3
-interaction pattern (including the placement setup that pattern prescribes
-before the launch) or, on failure, an explicit stop with a precise failure
-report. Never re-enter the invoking skill's earlier phases (Phase 0–2 where
-it defines them) in the same invocation, and never re-run preflight after
-it has passed in this session. A failed preflight is terminal for the
-invocation but is not a continuation marker: re-invocation after the user
-resolves the reported failure is a first invocation, and the preflight is
-re-run.
 
 ## 5. Batching and parallel dispatch
 
@@ -367,28 +322,6 @@ escalates to the user first), and resumes waiting. Never run the step
 yourself while the worker is active.
 
 ## 7. Recovery
-
-### Error triage
-
-Classify every failure during delegation before reacting:
-
-- **Recoverable — fix in place and continue at the current step.** Wrong or
-  renamed tool identifiers, harness-sandbox limitations (e.g. a sandboxed
-  script referencing APIs that the sandbox does not provide), off-by-one or
-  empty file reads, transient CLI/network hiccups, malformed one-off output
-  that can simply be re-fetched, and mis-placed workers (recover per §4
-  placement verification: stop the worker, re-dispatch into the correct
-  workspace). Correct the mistake and re-run only the failed step. A
-  recoverable error is **never** an invocation failure: do not re-invoke
-  this skill, do not restart detection or preflight, and do not re-enter
-  the invoking skill's earlier phases.
-- **Hard — stop and ask the user**: harness/daemon unavailability, the
-  provider itself missing or unauthenticated (a specific model failing auth
-  is recoverable — follow the model-failure procedure in §4), ambiguous
-  harness detection, and any dispatch that cannot be delivered to a real
-  worker.
-
-### Worker recovery
 
 - A failed, protocol-invalid, or interrupted worker is **never** fixed inline
   and **never** resumed by sending it follow-up work. Recovery is a **fresh**
