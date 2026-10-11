@@ -1,6 +1,7 @@
 ---
 name: worker-delegation
-description: "Worker delegation protocol for dispatching work to sub-agents/workers, harness-agnostically. Invoke BEFORE any dispatch, wait, or recovery: the SDLC skills (plan-feature, implement-ticket) require invoking it at every delegated step, and it is invoked directly when the user asks for a handoff or to spawn/delegate a worker. Detects the current harness (Orca, Paseo, or a harness with native sub-agents) and applies the harness-specific recipe from its harness/ directory. If it cannot be invoked, stop and ask the user — never dispatch from memory."
+description: "Shared protocol for dispatching work to sub-agents/workers, harness-agnostically. Loaded and followed by SDLC skills (plan-feature, implement-ticket) whenever they say to dispatch, supervise, wait for, or recover a sub-agent. Detects the current harness (Orca, Paseo, or a harness with native sub-agents) and applies the harness-specific recipe from its harness/ directory. Never triggered on its own."
+disable-model-invocation: true
 ---
 
 # Worker Delegation Protocol
@@ -12,11 +13,10 @@ dispatch, waiting, harvesting, recovery, completion proof, and the PR body
 contract). When an invoking skill and this skill both describe delegation
 mechanics, this skill wins.
 
-An invoking skill's reference to this protocol means: invoke this skill
-now, through the harness's skill-invocation mechanism, and follow it —
-never apply it from memory or from the invoking skill's summary. If this
-skill cannot be invoked, stop and ask the user. "Sub-agent" and "worker"
-are interchangeable in this protocol; the harness may use either term.
+Load and follow this skill whenever an invoking skill tells you to dispatch,
+supervise, or report on a sub-agent (also called a worker). "Sub-agent" and
+"worker" are interchangeable in this protocol; the harness may use either
+term.
 
 ## 1. Authority and harness resolution
 
@@ -33,15 +33,6 @@ are interchangeable in this protocol; the harness may use either term.
   If evidence is ambiguous (two harnesses plausibly match, or the expected
   evidence is missing exactly when it matters), stop and ask the user — never
   silently guess.
-- **Universal rejected evidence.** The following are never harness-detection
-  evidence for any harness: a CLI binary on `PATH` or a successful
-  `<app> status` of an app or daemon (they prove software is installed or
-  running on this machine, not that this session lives in it), endpoint or
-  config files on disk, and skills merely visible in this session's skill
-  list (another harness's skills can be installed here). The only detection
-  evidence is the positive predicate the harness file itself declares.
-  Harness files may add harness-specific rejected evidence; they never
-  relax this rule.
 - If the detected harness, its daemon/app, the selected provider, or provider
   authentication is unavailable, **stop and tell the user what must be
   fixed.** Never fall back to a bare shell, raw terminal input, or inline
@@ -55,9 +46,9 @@ must not assume a capability the harness does not declare:
 
 | Capability           | Meaning                                                                       |
 | -------------------- | ----------------------------------------------------------------------------- |
-| `placement`          | Workers can be anchored to a dedicated worktree/workspace and branch — supervisor-created, or prompt-directed (the worker creates/enters it and checks out the branch itself) per the harness file. |
+| `placement`          | Workers can be anchored to a dedicated worktree/workspace and branch.          |
 | `question-channel`   | A worker can ask the supervisor a question and resume after a reply.           |
-| `async-notification` | Worker completion is delivered as a notification (no polling required). Applies to background-spawned workers; a mechanism that returns results synchronously does not have it. |
+| `async-notification` | Worker completion is delivered as a notification (no polling required).        |
 | `model-pinning`      | A specific model can be verified or pinned for the coordinator and its workers.|
 
 ## 2. Roles
@@ -85,21 +76,14 @@ the dispatch itself is what is mandatory.
 
 Three patterns exist. The invoking skill names which one applies:
 
-1. **Fire-and-forget handoff** — the supervisor establishes the placement
-   (harness-created, or worker-self-placed per the harness file), launches
-   exactly one worker with an initial prompt, verifies acceptance
+1. **Fire-and-forget handoff** — the supervisor creates the placement,
+   launches exactly one worker with an initial prompt, verifies acceptance
    once (the worker loaded its skill / started its turn), reports the worker
    handle to the user, and **stops supervising**. The new worker owns the
    work from there and becomes the supervisor of any further delegation.
    Never re-send the prompt (re-sending queues a duplicate follow-up in the
    worker's queue), never monitor, and never also run the delegated skill in
-   the original session. On harnesses with `async-notification`, the worker
-   may be spawned in the background so the session stays free; a completion
-   notification arriving later is logged to the user and never resumes
-   supervision — pattern 1 ended at acceptance. A harness that can only run
-   workers synchronously (the supervisor blocks until the result returns)
-   cannot honor pattern 1: stop and report that to the user instead of
-   silently supervising to completion.
+   the original session.
 2. **Supervised dispatch loop** — dispatch → wait → harvest → cross-validate
    → recover (§4–§7). Used for every step the supervisor remains
    accountable for.
@@ -128,21 +112,13 @@ actual tool/flags):
 - `SPEC` — the full task-spec text (§4.1).
 - `TIMEOUT` — explicit wait timeout passed to every worker start; default
   `900000` ms unless the invoking skill says otherwise. Do not rely on a
-  shorter harness default. On mechanisms without a timeout knob, `TIMEOUT`
-  instead bounds the supervisor's own checkpoints (e.g. how long it waits on
-  a completion notification before inspecting).
-- `PLACEMENT` — only when the dispatch carries a placement (capability
-  `placement`): the exact branch, plus the workspace id and absolute
-  worktree path when the supervisor pre-creates them. When the worker
-  self-places (prompt-directed placement), `CHILD_BRANCH` is the invariant
-  and the worker resolves and verifies its own worktree path.
+  shorter harness default.
+- `PLACEMENT` — only when the dispatch is anchored to a supplied
+  worktree/workspace (capability `placement`): the exact workspace id, the
+  absolute worktree path, and the exact branch.
 - `EXPECTED_FILES` — the files the step is expected to touch (union when
   batching).
 - `MAY_MODIFY` — `yes` for `implementer`; `no` for `reviewer` and `explore`.
-- `SKILL_COMMAND` — the command the worker must invoke to run the delegated
-  skill. Written in the canonical `/skill:<name> <arg>` form; on harnesses
-  where workers invoke skills through a tool, the **worker** translates it
-  to the equivalent invocation — the skill name and argument are invariant.
 
 ### Task spec template
 
@@ -156,7 +132,7 @@ and must be able to discover nothing from ambient context.
 ## Plan step: <number and description>
 ## Role: <implementer|explore|reviewer>
 
-## Placement contract (include only when the dispatch carries a placement)
+## Placement contract (include only when the supervisor supplies a workspace)
 WORKSPACE_ID=<exact worktree workspace id, when the harness has workspaces>
 WORKTREE_PATH=<absolute worktree path>
 CHILD_BRANCH=<exact branch, when this dispatch works on a dedicated branch>
@@ -194,7 +170,7 @@ follow-up message.
 see §8.>
 ```
 
-### Placement verification (capability `placement`)
+### Placement verification (supervisor side, capability `placement`)
 
 When a dispatch is anchored to a supplied worktree/workspace: after the
 worker starts, verify — using the harness file's inspection mechanism — that
@@ -203,15 +179,6 @@ matches `CHILD_BRANCH`, and that it is parented to the supervisor (or an
 explicitly accepted host session). A worker that landed in the supervisor's
 workspace, the main checkout, or another worker's workspace is a placement
 failure: stop it, do not let it modify files, re-dispatch correctly.
-
-When placement is prompt-directed (the worker self-places), the placement
-contract in the task spec makes the worker perform the same checks itself:
-after creating or entering its workspace, it must run `pwd`,
-`git branch --show-current`, and `git rev-parse --show-toplevel`, compare
-them against `WORKTREE_PATH`/`CHILD_BRANCH`, and report a placement failure
-instead of editing files on mismatch. The supervisor cross-validates the
-placement from the worker's first output before relying on any further
-work.
 
 ### Preflight
 

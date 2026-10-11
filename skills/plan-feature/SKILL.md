@@ -19,12 +19,10 @@ the workflow. `implement-ticket` parses published bodies that follow those
 templates.
 
 Research, impact analysis, and other delegated steps in this skill follow
-the **worker-delegation** skill: invoke it (through the session's
-skill-invocation mechanism) before the first delegated step, and follow it.
-If it cannot be invoked, stop and ask the user — never dispatch from
-memory. It owns harness detection, dispatch mechanics, batching, wait/harvest
-discipline, and recovery. When this skill and `worker-delegation` disagree
-on delegation mechanics, `worker-delegation` wins.
+the **worker-delegation** skill: it owns harness detection, dispatch
+mechanics, batching, wait/harvest discipline, and recovery. When this skill
+and `worker-delegation` disagree on delegation mechanics, `worker-delegation`
+wins.
 
 ## Workflow
 
@@ -293,8 +291,7 @@ directly in each sub-ticket's plan.
 **Single-ticket mode:** Research the feature as a whole (default behavior
 below).
 
-Invoke the **worker-delegation** skill (stop and ask the user if it cannot
-be invoked), then dispatch a read-only `explore` worker through its
+Dispatch a read-only `explore` worker through the **worker-delegation**
 contract (role `explore`, `MAY modify files: no`, a readable kebab-case slug
 such as `explore-<feature-area>`, with the research brief below as the task
 spec). Prefer thoroughness in the brief. Do not pass it a bulk dump of
@@ -533,10 +530,8 @@ uncommitted. Present exactly these four options to the user:
 >   that branch.
 > - **D) Feature branch + implementation handoff** — everything in C, then
 >   also dispatch a fire-and-forget implementation handoff through the
->   worker-delegation skill: invoke that skill first (if it cannot be
->   invoked, stop and ask — do not dispatch from memory), resolve the
->   harness per its detection rules, create a placement checked out on that
->   branch, and launch a sub-agent in it running the implement skill
+>   worker-delegation skill: a worktree-based placement checked out on that
+>   branch, a sub-agent launched in it running the implement skill
 >   (`implement-ticket` for single tickets, `implement-ticket` epic mode for
 >   epics) instead of handing the user a copy-pasteable command. Requires a
 >   worker-capable harness; if the harness or `worker-delegation` preflight
@@ -659,21 +654,17 @@ Phase 6, after the Option C procedure):**
 
 Performs all of Option C (ticket/epic first, branch carrying the OpenSpec
 artifacts, local rollback, `Working branch` write-back), then additionally
-starts implementation immediately as a **fire-and-forget handoff**: first
-invoke the worker-delegation skill (if it cannot be invoked, stop and ask
-the user — never dispatch from memory or on CLI/app-status evidence), then
-resolve the harness per its detection rules and run the harness file's
-fire-and-forget handoff recipe — a placement checked out on the working
-branch, a sub-agent launched in it, and the implement skill invoked there.
-The placement mechanism follows the harness file's capabilities: a
-harness-created worktree/workspace where it creates placements, or
-worker-self-placement via the task spec's placement contract where it does
-not. Do not embed harness command sequences here — the harness file owns
-all command-level details. The current session never runs the implement
-skill itself — the dispatched sub-agent owns the implementation and becomes
-the supervisor of any further delegation. Requires a worker-capable harness;
-if the worker-delegation preflight fails, report the error and stop — do
-not silently fall back to option C.
+starts implementation immediately as a **fire-and-forget handoff** per the
+worker-delegation skill: resolve the harness per its detection rules, then
+run the harness file's fire-and-forget handoff recipe — a worktree-based
+placement checked out on the working branch, a sub-agent launched in it,
+and the implement skill invoked there. Do not embed harness command
+sequences here — the harness file owns all command-level details. The
+current session never runs the implement skill itself — the dispatched
+sub-agent owns the implementation and becomes the supervisor of any further
+delegation. Requires a worker-capable harness; if the worker-delegation
+preflight fails, report the error and stop — do not silently fall back to
+option C.
 
 Handoff timing (run in Phase 6 — single-ticket mode: right after step 3's
 branch push and `Working branch` write-back; epic mode: after the step 8
@@ -684,29 +675,18 @@ Dispatch the fire-and-forget handoff with this brief as the worker prompt:
 
 - First run `git fetch origin` in the current checkout — the working-branch
   ref must exist locally before worktree creation or the checkout fails.
-- Invoke the `worker-delegation` skill first (stop if it cannot be invoked),
-  run its preflight and harness detection, then follow the harness file's
-  fire-and-forget recipe with this brief as the worker prompt.
-- Establish the placement per the harness file's capabilities for repo
-  `<repoId>`, named `<N>-<slug>` (harness naming per the harness file),
-  linked to GitHub issue `<N>`. Prefer root-level placement (no parent
-  lineage) unless the user asked for it to be parented under the current
-  context. Repo setup hooks should run so dependencies are installed for
-  later test runs.
+- Create a new worktree-based placement for repo `<repoId>` named `<N>-<slug>`
+  (harness naming per the harness file), linked to GitHub issue `<N>`.
+  Prefer root-level placement (no parent lineage) unless the user asked for
+  it to be parented under the current context. Repo setup hooks should run so
+  dependencies are installed for later test runs.
 - The placement MUST end up checked out on the working branch
-  `feature/<N>-<slug>` (single ticket) or `epic/<N>-<slug>` (epic):
-  supervisor-side switch where the harness creates placements, or
-  worker-side via the prompt's placement contract (`git fetch origin`;
-  `git switch <branch>`, which DWIM-tracks `origin/<branch>`; then the
-  placement checks) where the worker self-places. Verify the checked-out
-  branch either from the created placement or from the worker's first
-  output.
-- Launch the worker agent per the harness file's fire-and-forget recipe and
-  send this command exactly once (re-sending the same command queues a
-  duplicate steering message in the agent's queue). The command below is
-  the canonical form; on harnesses where workers invoke skills through a
-  tool, the worker translates it to the equivalent invocation — the skill
-  name and argument are invariant:
+  `feature/<N>-<slug>` (single ticket) or `epic/<N>-<slug>` (epic). Verify
+  the checked-out branch inside the new placement after creation (`git
+  switch <branch>` DWIM-tracks `origin/<branch>`).
+- Launch the harness's default worker agent in that placement and send this
+  command exactly once (re-sending the same command queues a duplicate
+  steering message in the agent's queue):
   - single-ticket: `/skill:implement-ticket <ticket-title>`
   - epic mode: `/skill:implement-ticket <epic-number>`
 - Verify acceptance by reading the worker's initial output (skill loaded,
@@ -749,9 +729,8 @@ handoff follows the branch write-back per the timing above.
    `gh issue edit <N> --body-file`. For options A/B the `Working branch`
    line already says `main` and this step is skipped.
 4. **Option D (Phase 5.5): dispatch the handoff.** If Phase 5.5 selected
-   option D, run the Option D fire-and-forget handoff from Phase 5.5 —
-   invoking `worker-delegation` first, per its loading rule — with the
-   working branch `feature/<N>-<slug>` and the command
+   option D, run the Option D fire-and-forget handoff from Phase 5.5 with
+   the working branch `feature/<N>-<slug>` and the command
    `/skill:implement-ticket <ticket-title>` (the exact title confirmed in
    step 1), immediately after step 3's branch push and `Working branch`
    write-back.
@@ -851,9 +830,8 @@ handoff follows the branch write-back per the timing above.
    content and contain no publication placeholders or template metadata.
 9. Tell the user the epic and sub-tickets are ready. Show the epic URL and
    list all sub-ticket numbers. If Phase 5.5 selected option D, run the
-   Option D fire-and-forget handoff from Phase 5.5 — invoking
-   `worker-delegation` first, per its loading rule — with the working
-   branch `epic/<N>-<slug>` and the command `/skill:implement-ticket <epic-number>`
+   Option D fire-and-forget handoff from Phase 5.5 with the working branch
+   `epic/<N>-<slug>` and the command `/skill:implement-ticket <epic-number>`
    (after the step 8 verification, so the epic coordinator never starts
    before the children are published), and report the placement path and
    branch instead of a copy-pasteable command. Otherwise provide the
@@ -941,15 +919,11 @@ For everything else, the rollback section can say "Not applicable".
   Present options A (ticket only), B (commit to `main`), C (feature branch
   off fresh `origin/main`), and D (feature branch plus a fire-and-forget
   implementation handoff dispatched through worker-delegation, which
-  immediately starts the implement skill in a placement on the new branch)
+  immediately starts the implement skill in a new worktree placement)
   before creating any ticket, and record the choice in the plan's
   `OpenSpec Change` section. Never commit or push
   OpenSpec artifacts, and never create branches, without the user's explicit
-  selection. Option D: invoke `worker-delegation` first — if it cannot be
-  invoked, stop and ask — resolve the harness per its detection rules, and
-  dispatch per the harness file's fire-and-forget recipe; never dispatch on
-  CLI presence, app status, or skill-list visibility. Option C ordering:
-  ticket (or epic) first, branch afterwards —
+  selection. Option C ordering: ticket (or epic) first, branch afterwards —
   the branch name embeds the ticket number (`feature/<N>-<slug>` for single
   tickets, `epic/<N>-<slug>` for epics; one shared epic branch for all
   sub-tickets). After the branch is pushed, roll back the local uncommitted
