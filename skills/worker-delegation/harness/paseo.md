@@ -8,9 +8,13 @@ Recipe for the [Paseo](https://paseo.app) harness when
 Positive evidence, checked in order — the first match wins:
 
 1. `PASEO_AGENT_ID` is set (this session is itself a Paseo agent).
-2. The session toolset exposes the Paseo MCP tools (`create_agent`,
-   `send_agent_prompt`, `list_agents`, `create_workspace`, `list_workspaces`,
-   `list_providers`, `list_models`, `inspect_provider`, `list_profiles`).
+2. The session exposes the `mcp__paseo` MCP server through codemode —
+   verify with `searchTools("paseo")`, `describeNamespace("mcp__paseo")`, or
+   by filtering `ALL_TOOLS` for `mcp__paseo__*` names. In pi, MCP tools are
+   never listed in the direct session toolset, so in pi a toolset check is
+   never evidence; only the codemode discovery check counts. On a harness
+   whose session toolset lists MCP tools directly, their presence satisfies
+   this rule.
 3. `paseo status` reports a running daemon — **corroborating only:** a
    running daemon proves the Paseo app runs on this machine, not that this
    session lives inside Paseo. Daemon status alone is **ambiguous** — stop
@@ -28,18 +32,41 @@ rules.
 | `async-notification` | yes       | `notifyOnFinish` on `create_agent` / background `send_agent_prompt`. |
 | `model-pinning`      | yes       | Model-default gate below.                                    |
 
+## MCP access from pi (codemode)
+
+When the coordinator runs under pi and the `mcp__paseo` MCP server is
+configured, call the Paseo MCP tools from a `codemode` script:
+
+- **Names:** `tools.mcp__paseo__<tool>({ ...args })`; hyphens become
+  underscores (e.g. the MCP tool `get-agent-status` is
+  `tools.mcp__paseo__get_agent_status`).
+- **Discovery:** these tools are deferred — never listed in the session
+  toolset or the codemode description. Find them with
+  `searchTools("paseo")`, `describeNamespace("mcp__paseo")`, or
+  `ALL_TOOLS`.
+- **Results:** MCP tools resolve to a `CallToolResult` — prefer
+  `structuredContent` (typed data, e.g. `providers`, agents, workspaces);
+  fall back to `content[0].text`.
+- **Sandbox limits:** the codemode sandbox has no Node APIs and no
+  `process` — read environment variables (`PI_MODEL`, `PI_PROVIDER`,
+  `PASEO_AGENT_ID`, `PI_SESSION_ID`) through the `bash` tool instead (e.g.
+  `await tools.bash({ command: 'echo "$PI_MODEL"' })`).
+- **Batching:** issue independent calls (provider listing, agent listing,
+  parallel workspace creation) in one script with `Promise.allSettled()`.
+
 ## Authority: this file vs the installed `paseo` skill
 
 - Resolve Paseo mechanics from the **installed `paseo` skill**
   (version-matched to the daemon). If it is not installed, fall back to
   `paseo --help`, `paseo <command> --help`, and https://paseo.sh/docs/cli.
   Never run `paseo ...` commands from memory.
-- **Prefer the Paseo MCP tools** over the CLI wherever an equivalent exists.
-  Detect availability once per session: if your toolset does not list these
-  tools, treat the MCP surface as unavailable and use the CLI fallbacks
-  throughout. Also fall back to the CLI per call when no equivalent exists
-  (notably logs harvesting, placement inspection, daemon status, provider
-  diagnostics, and stop).
+- **Prefer the Paseo MCP tools**, called through codemode per
+  "MCP access from pi" above, wherever an equivalent exists. When codemode
+  or the `mcp__paseo` server is unavailable (non-pi harnesses, or the
+  server is not configured), use the CLI fallbacks throughout. Also fall
+  back to the CLI per call when no equivalent exists (notably logs
+  harvesting, placement inspection, daemon status, provider diagnostics,
+  and stop).
 - The installed `paseo` skill's general guidance ("don't poll — the
   notification will tell you") targets single fire-and-forget agents. It does
   **not** fit a supervisor that must batch, parallel-dispatch, and reconcile
@@ -74,9 +101,11 @@ providers. It is an execution/runtime choice, not a product provider choice.
    `list_profiles` MCP tool (CLI fallback: the installed `paseo` skill's
    profile discovery) and pick one the user requested or one whose notes
    match the work; otherwise launch with the validated default provider.
-7. **Model-default gate** (capability `model-pinning`). Worker dispatches
-   omit an explicit model, so every dispatched worker resolves to the
-   selected provider's configured default in the Paseo daemon config. Before
+7. **Model-default gate** (capability `model-pinning`). Default dispatches
+   (the common case) omit an explicit model, so every such worker resolves
+   to the selected provider's configured default in the Paseo daemon config;
+   explicitly user-selected models are validated per Dispatch mechanics
+   instead and are not subject to this gate. For default dispatches, before
    the first dispatch, verify that default against the coordinator's own
    model:
    - Read `${PASEO_HOME:-$HOME/.paseo}/config.json` and resolve the selected
@@ -99,16 +128,35 @@ providers. It is an execution/runtime choice, not a product provider choice.
      `~/.paseo/config.json` autonomously, never proceed on mismatch, never
      switch providers, and never fall back to inline work.
 
+A preflight (pass or fail) is terminal for this invocation: the very next
+action is the dispatch sequence of the invoking skill's chosen §3 pattern —
+for the fire-and-forget handoff, the recipe below, whose workspace setup
+(steps 1–2) precedes the launch — or, on failure, an explicit stop with a
+precise failure report. Never re-enter the invoking skill's earlier phases
+(Phase 0–2 where it defines them).
+
 ## Dispatch mechanics
 
 - **Dispatch** (`ROLE`, `SLUG`, `TITLE`, `SPEC`, `PLACEMENT`): use the
-  `create_agent` MCP tool — `provider` set to the validated provider,
+  `create_agent` MCP tool — `provider` set to the combined
+  `"<provider>/<model-id>"` form (e.g. `pi/openrouter/z-ai/glm-5.3-flash`;
+  the first path segment is the provider, everything after it is the model
+  id); the MCP surface rejects a bare provider with an input-validation
+  error. The model id is either the daemon-resolved default validated by
+  the model-default gate (step 7), or an explicitly user-selected model —
+  validate the latter against the provider's model list (step 4's
+  diagnostic or `list_models`) before dispatch; the gate continues to
+  govern default dispatches only.
   `title` set to the kebab-case `SLUG`, `initialPrompt` set to the full
   task-spec text, `workspaceId` set to the supplied worktree workspace when
   the dispatch is anchored to one, and `notifyOnFinish` left enabled (the
   agent-scoped default) so the completion notification arrives without
-  polling. Fall back to the `paseo run` CLI when the MCP tool surface is
-  unavailable; the installed `paseo` skill owns its flags.
+  polling. Fall back to the `paseo run` CLI when codemode or the
+  `mcp__paseo` server is unavailable; the CLI accepts a bare `--provider`
+  as well as `provider/model`; the installed `paseo` skill owns its flags.
+- **Parallel dispatch:** when §5 batching rules allow concurrent workers,
+  create them in a single codemode script (`Promise.allSettled` over the
+  `create_agent` calls) so they start together.
 - **Follow-up / question answer**: `send_agent_prompt { agentId, prompt }`
   (CLI fallback: `paseo send <id> "<answer>"`).
 - **Inspect**: `paseo inspect <id>` — shows `Cwd`, `ParentAgentId`, state.
@@ -134,8 +182,9 @@ pattern). Input: target repo, working branch name, worker prompt.
    so no in-workspace `git switch` is needed — verify the returned workspace
    descriptor (path plus branch) instead. Workspace creation runs Paseo's
    repo setup hooks so dependencies are installed for later test runs.
-3. Launch the worker (`create_agent`; CLI: `paseo run`) with the validated
-   provider, `workspaceId` from step 2, a readable kebab-case `title`, and
+3. Launch the worker (`create_agent`; CLI: `paseo run`) with `provider` in
+   the combined `provider/model` form (Dispatch mechanics above),
+   `workspaceId` from step 2, a readable kebab-case `title`, and
    `initialPrompt` set to the supplied prompt, delivered exactly once
    (re-sending the same prompt queues a duplicate steering message in the
    worker's queue). Set `notifyOnFinish: false` — this is a fire-and-forget
