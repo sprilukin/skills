@@ -10,10 +10,12 @@ This skill owns the **WHAT**: ticket/epic selection, plan parsing, phase
 order, gates, and role assignments. The **worker-delegation** skill owns the
 **HOW**: harness detection, dispatch mechanics, provider preflight, the
 wait/harvest discipline, recovery, completion proof, the PR description
-contract, and testing obligations. Load and follow `worker-delegation`
-whenever this skill says to dispatch, wait for, or recover a sub-agent; when
-this skill and `worker-delegation` disagree on mechanics, `worker-delegation`
-wins.
+contract, and testing obligations. **Invoke `worker-delegation` through the
+session's skill-invocation mechanism before the first dispatch, wait, or
+recovery** (this skill says so at each such point); if it cannot be invoked,
+stop and ask the user — never dispatch from memory or from this skill's
+summary of it. When this skill and `worker-delegation` disagree on
+mechanics, `worker-delegation` wins.
 
 The coordinator (this skill's agent, in direct or epic mode) may discover
 context, parse plans, run read-only checks, and summarize results, but must
@@ -134,10 +136,11 @@ coordinate.
 
 ### Phase 3 — Execute through delegated workers
 
-Run the `worker-delegation` preflight for the detected harness, then
-dispatch every plan step through the `worker-delegation` contract — task
-spec template, batching, parallel rules, readable slugs, wait/harvest
-discipline, and recovery — as follows:
+Invoke the `worker-delegation` skill (stop and ask the user if it cannot be
+invoked), run its preflight for the detected harness, then dispatch every
+plan step through the `worker-delegation` contract — task spec template,
+batching, parallel rules, readable slugs, wait/harvest discipline, and
+recovery — as follows:
 
 - After every step: verify the worker's terminal state and completion
   report, run `git diff --name-only`, and compare with the declared expected
