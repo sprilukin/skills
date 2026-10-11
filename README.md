@@ -11,23 +11,29 @@ perform specific workflows.
 # Install all skills from this repo (interactive picker)
 npx skills add sprilukin/skills
 
-# Install a specific skill
+# Install a specific skill by name
 npx skills add sprilukin/skills --skill git-ops
 
 # Install everything, non-interactive, globally
 npx skills add sprilukin/skills --all -g -y
 
-# Install only the general-purpose skills
-npx skills add sprilukin/skills/tree/main/skills/general-purpose
+# Install only the general-purpose skills (full URL with subpath)
+npx skills add https://github.com/sprilukin/skills/tree/main/skills/general-purpose
 
-# Install only the SDLC skills
-npx skills add sprilukin/skills/tree/main/skills/agentic-sdlc
+# Install only the SDLC skills (full URL with subpath)
+npx skills add https://github.com/sprilukin/skills/tree/main/skills/agentic-sdlc
+
+# Install a single skill from a category (direct path to the skill)
+npx skills add https://github.com/sprilukin/skills/tree/main/skills/agentic-sdlc/plan-feature
 ```
 
 Browse at [skills.sh/sprilukin/skills](https://skills.sh/sprilukin/skills).
 
-Add `-g -y` to any command to install non-interactively to your user
-directory instead of the current project.
+Add `-g` to install globally (user directory instead of the current
+project), and `-y` or `--all` to skip interactive prompts.
+
+Note: subpath installs require the full `https://github.com/...` URL —
+the `owner/repo` shorthand only supports the repo root.
 
 ## Skills
 
