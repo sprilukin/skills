@@ -1,7 +1,6 @@
 ---
 name: worker-delegation
 description: "Shared protocol for dispatching work to sub-agents/workers, harness-agnostically. Loaded and followed by SDLC skills (plan-feature, implement-ticket) whenever they say to dispatch, supervise, wait for, or recover a sub-agent. Detects the current harness (Orca, Paseo, or a harness with native sub-agents) and applies the harness-specific recipe from its harness/ directory. Never triggered on its own."
-disable-model-invocation: true
 ---
 
 # Worker Delegation Protocol
@@ -44,12 +43,12 @@ term.
 Each harness file declares which capabilities it supports. Invoking skills
 must not assume a capability the harness does not declare:
 
-| Capability           | Meaning                                                                       |
-| -------------------- | ----------------------------------------------------------------------------- |
-| `placement`          | Workers can be anchored to a dedicated worktree/workspace and branch.          |
-| `question-channel`   | A worker can ask the supervisor a question and resume after a reply.           |
-| `async-notification` | Worker completion is delivered as a notification (no polling required).        |
-| `model-pinning`      | A specific model can be verified or pinned for the coordinator and its workers.|
+| Capability           | Meaning                                                                         |
+| -------------------- | ------------------------------------------------------------------------------- |
+| `placement`          | Workers can be anchored to a dedicated worktree/workspace and branch.           |
+| `question-channel`   | A worker can ask the supervisor a question and resume after a reply.            |
+| `async-notification` | Worker completion is delivered as a notification (no polling required).         |
+| `model-pinning`      | A specific model can be verified or pinned for the coordinator and its workers. |
 
 ## 2. Roles
 
@@ -274,13 +273,13 @@ terminal state, harvested per the harness file.
 
 Terminal-state matrix:
 
-| Worker state                   | Supervisor action                                                                                      |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| running                        | Await the completion notification (or wait with `TIMEOUT`); inspect liveness; answer pending questions. |
-| idle with valid proof/report   | Harvest from logs/state; reconcile files/GitHub; continue. Do not retry.                               |
-| idle without required proof    | Record protocol-invalid completion; schedule a fresh recovery dispatch in the preserved workspace/branch.|
-| error                          | Diagnose via the harness inspection mechanism; schedule a fresh recovery dispatch.                     |
-| archived / terminal            | Treat as history; reconcile via files/GitHub; never re-wait, never resume.                             |
+| Worker state                 | Supervisor action                                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| running                      | Await the completion notification (or wait with `TIMEOUT`); inspect liveness; answer pending questions.   |
+| idle with valid proof/report | Harvest from logs/state; reconcile files/GitHub; continue. Do not retry.                                  |
+| idle without required proof  | Record protocol-invalid completion; schedule a fresh recovery dispatch in the preserved workspace/branch. |
+| error                        | Diagnose via the harness inspection mechanism; schedule a fresh recovery dispatch.                        |
+| archived / terminal          | Treat as history; reconcile via files/GitHub; never re-wait, never resume.                                |
 
 Questions and escalations (capability `question-channel`): a worker needing
 a decision ends with a QUESTION section and idles. The supervisor reads it
