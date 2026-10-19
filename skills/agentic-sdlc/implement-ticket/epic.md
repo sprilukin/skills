@@ -54,8 +54,7 @@ instead of restating:**
    possible. Before mutating shared infrastructure (databases, generated
    types, env), check project guidance for coordination rules; if none, ask
    the user how to coordinate.
-10. **Harness preflight.** The `worker-delegation` preflight (including any
-    model-default gate, when the harness declares `model-pinning`) runs
+10. **Harness preflight.** The `worker-delegation` preflight runs
     before the first worker dispatch and on every restart. Any preflight
     failure stops the run before creating branches, worktree placements, or
     workers.
@@ -67,12 +66,17 @@ Read root `AGENTS.md`, `SKILL.md`, and `autonomous.md`. Do **not** pre-load
 repository/default branch with `gh repo view`. Never read `.env*` except
 `.env.example`.
 
-Detect the harness and run the `worker-delegation` preflight (repository
-default worker per the harness file; an execution/runtime choice, not a
-product provider choice), including any model-default gate (invariant 10).
-Stop only if the harness is unavailable, the provider is absent or fails its
-diagnostic, a model-default gate fails, or the first worker cannot start.
-Never work inline or invent mechanics.
+Detect the harness and run the `worker-delegation` preflight (worker
+agent/provider per the harness file's selection rule; an execution/runtime
+choice, not a product provider choice). Stop only if the harness is
+unavailable, the provider is absent or fails its diagnostic, or the first
+worker cannot start. On the native harness in `worker-delegation`'s native
+synchronous mode (no sub-agent spawn mechanism), the coordinator executes
+every child itself, sequentially, in implementation order — placement,
+dispatch, and question-channel mechanics are inapplicable; branch, PR,
+merge-authority, and healing-bound invariants still apply, and each redo
+counts as a healing attempt. Never work inline outside that mode or invent
+mechanics.
 
 Before creating any workers, inspect existing harness state per the harness
 file (list workers, workspaces, and prior coordination context, including

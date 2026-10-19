@@ -1,6 +1,6 @@
 ---
 name: worker-delegation
-description: "Shared protocol for dispatching work to sub-agents/workers, harness-agnostically. Loaded and followed by SDLC skills (plan-feature, implement-ticket) whenever they say to dispatch, supervise, wait for, or recover a sub-agent. Detects the current harness (Orca, Paseo, or a harness with native sub-agents) and applies the harness-specific recipe from its harness/ directory. Never triggered on its own."
+description: "Shared protocol for dispatching work to sub-agents/workers, harness-agnostically. Loaded and followed by SDLC skills (plan-feature, implement-ticket) whenever they say to dispatch, supervise, wait for, or recover a sub-agent. Detects the current harness (Orca, Paseo, or native — sub-agent passthrough or synchronous fallback) and applies the harness-specific recipe from its harness/ directory. Never triggered on its own."
 ---
 
 # Worker Delegation Protocol
@@ -29,14 +29,18 @@ term.
   syntax from memory or from invoking skills.
 - **Detection precedence: Orca → Paseo → native.** Evaluate each harness
   file's detection predicate in that order and use the first positive match.
-  If evidence is ambiguous (two harnesses plausibly match, or the expected
-  evidence is missing exactly when it matters), stop and ask the user — never
-  silently guess.
+  If neither Orca nor Paseo matches, the harness is **native** — its harness
+  file applies, and its mode probe (sub-agent passthrough vs synchronous
+  mode) decides how delegation runs. If evidence is ambiguous (two
+  harnesses plausibly match, or the expected evidence is missing exactly
+  when it matters), stop and ask the user — never silently guess.
 - If the detected harness, its daemon/app, the selected provider, or provider
   authentication is unavailable, **stop and tell the user what must be
   fixed.** Never fall back to a bare shell, raw terminal input, or inline
   work, and never substitute a different mechanism than the detected harness
-  recipe prescribes.
+  recipe prescribes. Exception: on the native harness, a spawn-capability
+  probe that finds no sub-agent mechanism routes into the native harness
+  file's synchronous mode instead of stopping.
 
 ### Capability flags
 
@@ -48,7 +52,6 @@ must not assume a capability the harness does not declare:
 | `placement`          | Workers can be anchored to a dedicated worktree/workspace and branch.           |
 | `question-channel`   | A worker can ask the supervisor a question and resume after a reply.            |
 | `async-notification` | Worker completion is delivered as a notification (no polling required).         |
-| `model-pinning`      | A specific model can be verified or pinned for the coordinator and its workers. |
 
 ## 2. Roles
 
@@ -71,6 +74,14 @@ a real worker before it executes. Delegation is a hard requirement, never a
 suggestion. Batching several steps into one dispatch is allowed (see §5);
 the dispatch itself is what is mandatory.
 
+**Native synchronous mode exception.** When the detected harness file is
+native and its spawn-capability probe finds no sub-agent mechanism (the
+native harness file's synchronous mode), delegated steps are executed by the
+supervisor itself, sequentially, and the mode must be announced to the user
+before the first delegated step. This is the only sanctioned inline path; it
+never applies when Orca or Paseo detection matched. The mode's rules live in
+the native harness file.
+
 ## 3. Interaction patterns
 
 Three patterns exist. The invoking skill names which one applies:
@@ -82,7 +93,12 @@ Three patterns exist. The invoking skill names which one applies:
    work from there and becomes the supervisor of any further delegation.
    Never re-send the prompt (re-sending queues a duplicate follow-up in the
    worker's queue), never monitor, and never also run the delegated skill in
-   the original session.
+   the original session. This pattern exists only where the detected harness
+   file provides a fire-and-forget handoff recipe. If it does not (a
+   synchronous, placement-less harness such as native passthrough), report
+   that this harness cannot perform the handoff and stop — never improvise
+   one with background jobs or inline work, and never silently degrade the
+   invoking skill's contract.
 2. **Supervised dispatch loop** — dispatch → wait → harvest → cross-validate
    → recover (§4–§7). Used for every step the supervisor remains
    accountable for.
@@ -183,9 +199,7 @@ failure: stop it, do not let it modify files, re-dispatch correctly.
 
 Run the harness file's preflight once per session, before the first
 dispatch. This includes daemon/app status, provider availability and
-diagnostics, and — when the harness declares `model-pinning` — the
-model-default gate (the coordinator's own model must match the configured
-sub-agent default). Never print credentials, tokens, or secret configuration. Stop
+diagnostics. Never print credentials, tokens, or secret configuration. Stop
 before the first dispatch on any preflight failure with a precise report of
 what must be installed, configured, or signed in. If a provider is available
 but a specific model fails authentication at runtime, do not blindly retry:

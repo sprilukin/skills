@@ -341,11 +341,11 @@ Ask it to:
 Cross-validate the worker's report per the `worker-delegation` wait/harvest
 discipline before relying on it.
 
-**Inline fallback (only when no worker capability exists).** Only when the
-detected harness has no worker capability at all (no sub-agent mechanism of
-any kind), perform the research inline in this session instead — this is the
-sole sanctioned exception to the no-inline rule, and it must be announced to
-the user. If the harness has a worker capability, the dispatch is mandatory.
+**Inline fallback (native synchronous mode only).** Only when
+worker-delegation resolves the native harness and its mode probe finds no
+sub-agent spawn mechanism (worker-delegation's native synchronous mode),
+perform the research inline in this session instead, announced to the user.
+If a sub-agent spawn mechanism exists, the dispatch is mandatory.
 
 If the explore findings report **no established local pattern** for the
 feature (or a major sub-component of it), THEN and only then:
@@ -512,7 +512,9 @@ revised plan.
 This phase always runs after the plan is approved, before any ticket is
 created. At this point the OpenSpec change artifacts under
 `openspec/changes/<change-name>/` exist locally and are typically
-uncommitted. Present exactly these four options to the user:
+uncommitted. Present options A–C, plus option D only when the detected
+harness file provides a fire-and-forget handoff recipe (option D is never
+offered on the native harness):
 
 > The OpenSpec change artifacts are uncommitted. How should I handle them
 > before creating the ticket?
@@ -533,9 +535,11 @@ uncommitted. Present exactly these four options to the user:
 >   worker-delegation skill: a worktree-based placement checked out on that
 >   branch, a sub-agent launched in it running the implement skill
 >   (`implement-ticket` for single tickets, `implement-ticket` epic mode for
->   epics) instead of handing the user a copy-pasteable command. Requires a
->   worker-capable harness; if the harness or `worker-delegation` preflight
->   fails, report the error and stop — do not silently fall back to option C.
+>   epics) instead of handing the user a copy-pasteable command. Offered
+>   only when the detected harness file provides a fire-and-forget handoff
+>   recipe; if it was nonetheless selected without that support, or the
+>   `worker-delegation` preflight fails, report the error and stop — do not
+>   silently fall back to option C.
 
 Do not proceed to Phase 6 until the user picks A, B, C, or D. Then apply the
 selected option:
@@ -662,9 +666,10 @@ and the implement skill invoked there. Do not embed harness command
 sequences here — the harness file owns all command-level details. The
 current session never runs the implement skill itself — the dispatched
 sub-agent owns the implementation and becomes the supervisor of any further
-delegation. Requires a worker-capable harness; if the worker-delegation
-preflight fails, report the error and stop — do not silently fall back to
-option C.
+delegation. Run only when the detected harness file provides a
+fire-and-forget handoff recipe (option D is never offered on harnesses
+without one, e.g. the native harness); if the preflight fails, report the
+error and stop — do not silently fall back to option C.
 
 Handoff timing (run in Phase 6 — single-ticket mode: right after step 3's
 branch push and `Working branch` write-back; epic mode: after the step 8
@@ -684,9 +689,9 @@ Dispatch the fire-and-forget handoff with this brief as the worker prompt:
   `feature/<N>-<slug>` (single ticket) or `epic/<N>-<slug>` (epic). Verify
   the checked-out branch inside the new placement after creation (`git
   switch <branch>` DWIM-tracks `origin/<branch>`).
-- Launch the harness's default worker agent in that placement and send this
-  command exactly once (re-sending the same command queues a duplicate
-  steering message in the agent's queue):
+- Launch the worker agent/provider resolved per the harness file's selection
+  rule and send this command exactly once (re-sending the same command
+  queues a duplicate steering message in the agent's queue):
   - single-ticket: `/skill:implement-ticket <ticket-title>`
   - epic mode: `/skill:implement-ticket <epic-number>`
 - Verify acceptance by reading the worker's initial output (skill loaded,
@@ -919,7 +924,9 @@ For everything else, the rollback section can say "Not applicable".
   Present options A (ticket only), B (commit to `main`), C (feature branch
   off fresh `origin/main`), and D (feature branch plus a fire-and-forget
   implementation handoff dispatched through worker-delegation, which
-  immediately starts the implement skill in a new worktree placement)
+  immediately starts the implement skill in a new worktree placement; offer
+  D only when the detected harness file provides a fire-and-forget handoff
+  recipe — never on the native harness)
   before creating any ticket, and record the choice in the plan's
   `OpenSpec Change` section. Never commit or push
   OpenSpec artifacts, and never create branches, without the user's explicit

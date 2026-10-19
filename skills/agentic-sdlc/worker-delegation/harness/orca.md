@@ -24,8 +24,6 @@ Positive evidence, checked in order — the first match wins:
 
 Never count any of these as detection evidence:
 
-- `ORCA_PI_STATUS_OWNED` — self-set by the orca-pi status extension at load
-  in any terminal, including outside Orca.
 - `orca` CLI presence (`command -v orca`) or a successful `orca status` —
   that only proves the Orca app is running on this machine, not that this
   session lives in an Orca pane. CLI presence and reachability are the
@@ -53,7 +51,6 @@ rules.
 | `placement`          | yes       | Orca-managed worktrees, each with its own UI group.           |
 | `question-channel`   | yes       | Worker `ask`/`escalation`; supervisor `reply`.               |
 | `async-notification` | no        | Completion is a one-shot lifecycle event; use inspect/harvest discipline (§6 of the protocol). |
-| `model-pinning`      | no        | Not supported by this harness.                               |
 
 ## Authority: this file vs the live Orca skills
 
@@ -110,11 +107,22 @@ continue with a null, guessed, or unverified Run or Task ID.
 
 ## Worker provider and readiness preflight
 
-The repository's default worker agent is **`pi`**; use it unless the user
-explicitly selects another supported Orca TUI agent (`opencode`, `omp`,
-`gemini`, `grok`, `aider`, …). The worker agent is an execution/runtime
-choice, not a product provider choice. Do not copy a provider from an Orca
-guide example without checking this host first.
+Orca has no configured default worker agent: every launch path requires an
+explicit agent id (`worker-start (--agent <agent> | --terminal <handle>)`
+and `agent launch` both require `--agent`; `worktree create` without
+`--agent` starts no agent). The worker agent therefore defaults to the
+coordinator's own agent, resolved by self-lookup: read `ORCA_TERMINAL_HANDLE`
+from the environment, then look up that terminal's metadata (the `orca-cli`
+skill's terminal show/list commands, `--json`) and read its agent-identity
+field. A set value is the coordinator's own agent id — use it as the default
+worker agent. If `ORCA_TERMINAL_HANDLE` is missing, the handle is not
+listed, or the identity field is empty (the pane is a plain shell, not an
+agent), stop and ask the user which supported Orca agent to use — never
+guess, never name an agent in this file, and never derive one from
+agent-specific environment variables. If the user explicitly selects an
+agent, use theirs. Then validate the resolved id against the live guide and
+run the readiness checks for it. It is an execution/runtime choice, not a
+product provider choice.
 
 There are two readiness regimes. Run only the checks for the selected
 agent's regime; never run the other regime's checks:
@@ -124,7 +132,7 @@ agent's regime; never run the other regime's checks:
   `command -v <agent>` and `<agent> --version`. Do NOT run
   `orca account list` or any managed-account diagnostic for these.
   `orca account` manages only Claude and Codex accounts, so missing
-  Claude/Codex managed accounts must never block a `pi`/`opencode`/etc.
+  Claude/Codex managed accounts must never block a local-agent
   session.
 - **Managed-account agents** (`claude`, `codex` only): in addition to the
   executable check, run `orca account list --json` and require at least one
@@ -250,9 +258,13 @@ launch the agent, deliver the prompt, stop supervising):
    `feature/<worktree-name>` from the ref — so the branch must be checked
    out explicitly inside the new worktree after creation (`git switch
    <branch>` DWIM-tracks `origin/<branch>`).
-4. Launch a default `pi` agent in that worktree and send the supplied prompt
-   exactly once (re-sending the same command queues a duplicate steering
-   message in the agent's queue).
+4. Launch the worker agent resolved per the preflight rule above in that
+   worktree and send the supplied prompt exactly once (re-sending the same
+   command queues a duplicate steering message in the agent's queue).
+   Resolve the agent before step 2: Orca starts the agent with the worktree
+   (`worktree create --agent`), so the choice must already be made when the
+   worktree is created — or create the worktree bare and launch the agent
+   into it afterward with `agent launch`, per the `orca-cli` skill.
 5. Verify acceptance by reading the terminal (skill loaded, turn started),
    not by re-sending.
 6. Set the workspace-card comment `<skill> started on <branch>` and report

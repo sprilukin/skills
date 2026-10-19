@@ -26,7 +26,6 @@ rules.
 | `placement`          | yes       | Paseo worktree workspaces (`create_workspace`).              |
 | `question-channel`   | yes       | `send_agent_prompt` (worker resumes in existing conversation).|
 | `async-notification` | yes       | `notifyOnFinish` on `create_agent` / background `send_agent_prompt`. |
-| `model-pinning`      | yes       | Model-default gate below.                                    |
 
 ## Authority: this file vs the installed `paseo` skill
 
@@ -53,9 +52,15 @@ rules.
 
 ## Preflight (once per session, before the first dispatch)
 
-The repository default worker provider is **`pi`**. Use it unless the user
-explicitly selects another supported provider; never silently switch
-providers. It is an execution/runtime choice, not a product provider choice.
+The worker provider defaults to the coordinator's own provider. Resolve it
+by self-lookup: read `PASEO_AGENT_ID` from the environment and look this
+agent up (`paseo inspect "$PASEO_AGENT_ID"`, or `paseo ls` / `list_agents`);
+the returned provider is the default. Then validate it is enabled/available
+via `paseo provider ls` / `list_providers`. If the user explicitly selects a
+provider, use theirs instead. If self-lookup fails, yields no provider, or
+the resolved provider is unavailable, stop and ask the user — never guess,
+never name a provider from memory. This is an execution/runtime choice, not
+a product provider choice.
 
 1. `paseo status` — confirm the daemon is running. If not, start it per the
    installed `paseo` skill; stop if that fails.
@@ -68,36 +73,14 @@ providers. It is an execution/runtime choice, not a product provider choice.
 4. `paseo provider diagnostic <provider>` — require the daemon-resolved
    binary, version, and model list to be healthy. Never print credentials,
    tokens, or secret configuration.
-5. `command -v <agent>` and `<agent> --version` — executable present on PATH
-   and able to report its version without prompting.
+5. The provider's executable — `command -v <executable>` and
+   `<executable> --version` for the daemon-resolved binary reported by step
+   4 — present on PATH and able to report its version without prompting.
 6. **Profiles:** if agent profiles are configured, consult them via the
    `list_profiles` MCP tool (CLI fallback: the installed `paseo` skill's
    profile discovery) and pick one the user requested or one whose notes
-   match the work; otherwise launch with the validated default provider.
-7. **Model-default gate** (capability `model-pinning`). Worker dispatches
-   omit an explicit model, so every dispatched worker resolves to the
-   selected provider's configured default in the Paseo daemon config. Before
-   the first dispatch, verify that default against the coordinator's own
-   model:
-   - Read `${PASEO_HOME:-$HOME/.paseo}/config.json` and resolve the selected
-     provider's execution default: the entry with `"isDefault": true` under
-     `agents.providers.<provider>.additionalModels` (for the default `pi`
-     provider: `agents.providers.pi.additionalModels`). If no entry has
-     `"isDefault": true`, the effective worker default is unverifiable —
-     treat the gate as failed.
-   - Compare that id with the coordinator's own model, which pi exposes as
-     `PI_MODEL` (bare id) and `PI_PROVIDER` (provider prefix) on every
-     spawned command, re-resolved at each command start. The gate passes when
-     the config id equals `${PI_PROVIDER}/${PI_MODEL}` or the bare
-     `PI_MODEL`; unset `PI_MODEL`/`PI_PROVIDER` (coordinator not running
-     under pi) is a gate failure.
-   - **On mismatch, stop before the first dispatch** and before any other
-     side effect. Report the coordinator model and the config default
-     verbatim, and tell the user to set `isDefault: true` on the intended
-     entry in Paseo's provider settings (or `~/.paseo/config.json`) and run
-     `paseo reload`, then re-invoke the skill. Never edit
-     `~/.paseo/config.json` autonomously, never proceed on mismatch, never
-     switch providers, and never fall back to inline work.
+   match the work; otherwise launch with the validated coordinator-default
+   provider (resolved per the preamble).
 
 ## Dispatch mechanics
 

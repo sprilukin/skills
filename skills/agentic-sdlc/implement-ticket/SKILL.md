@@ -21,7 +21,10 @@ never implement, explore, fix, or review delegated work inline. If the
 detected harness, its daemon/app, the selected provider, or provider
 authentication is unavailable, stop and tell the user what must be fixed.
 Never fall back to a generic subagent substitute, bare shell, raw terminal
-input, or inline work.
+input, or inline work. Exception: on the native harness, worker-delegation
+may resolve synchronous mode (no sub-agent spawn mechanism) — in that mode
+the coordinator executes delegated steps itself, sequentially, per that
+mode's rules, announced to the user, instead of stopping.
 
 ### What this skill keeps vs. delegates
 
@@ -137,7 +140,9 @@ coordinate.
 Run the `worker-delegation` preflight for the detected harness, then
 dispatch every plan step through the `worker-delegation` contract — task
 spec template, batching, parallel rules, readable slugs, wait/harvest
-discipline, and recovery — as follows:
+discipline, and recovery. In worker-delegation's native synchronous mode,
+execute every plan step yourself, sequentially, per that mode's rules
+instead of dispatching. As follows:
 
 - After every step: verify the worker's terminal state and completion
   report, run `git diff --name-only`, and compare with the declared expected
@@ -161,7 +166,9 @@ requires a fresh implementer fix (per `worker-delegation` recovery) followed
 by verification again. Do not commit with a failure.
 
 Then dispatch a read-only `reviewer` worker against the full diff of changes
-made in this session. Include the ticket constraints and project conventions
+made in this session (native synchronous mode: perform this review pass
+yourself against the same checklist, announced as a self-review). Include
+the ticket constraints and project conventions
 in the task spec, plus review focus: bugs and logic errors, security issues
 (secrets, injection, auth bypass, missing validation), performance problems,
 maintainability, and adherence to project conventions + the ticket's
@@ -205,7 +212,9 @@ check must be investigated from its logs and treated as an implementation or
 verification failure.
 
 Every CI failure fix must be dispatched to a fresh supervised `implementer`
-worker (per `worker-delegation` recovery); never fix it inline. Give the
+worker (per `worker-delegation` recovery); never fix it inline (native
+synchronous mode: apply the fix yourself — that is the mode's recovery
+path). Give the
 worker the PR, failing check and log context, relevant files, and the
 requirement to preserve the ticket's acceptance criteria. After each fix,
 verify worker completion and modified-file scope, run the complete local
@@ -222,8 +231,9 @@ deviations.
 
 - Never commit or push `main`; never create or delete worktrees in direct
   mode.
-- Never perform delegated work inline or use a non-harness substitute;
-  follow the `worker-delegation` recovery discipline on any failed worker.
+- Never perform delegated work inline or use a non-harness substitute —
+  except in `worker-delegation`'s native synchronous mode; follow the
+  `worker-delegation` recovery discipline on any failed worker.
 - Never skip lint/typecheck/review, and never commit failing verification.
 - Follow the `worker-delegation` contract when this document and it differ.
 - Direct mode: user confirmation is required for ticket selection and any

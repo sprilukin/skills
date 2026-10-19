@@ -146,11 +146,6 @@ batching several steps into one dispatch is allowed per the
   cannot start, stop; do not substitute another provider or retry blindly.
   If a model fails auth at runtime, follow the `worker-delegation` preflight
   model-failure procedure.
-- **Model-default gate.** When the harness declares `model-pinning`, the
-  preflight's model-default gate applies to sub-worker dispatches too: this
-  coordinator's own model must match the configured sub-agent default before
-  the first sub-worker dispatch; on mismatch, stop and report per
-  `worker-delegation`.
 - **Reviewer and explorer sub-workers must not modify files** (`MAY modify
   files: no`). Only `implementer` sub-workers may change code.
 
