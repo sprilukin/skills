@@ -5,20 +5,28 @@ a quirk has cost whole work orders.
 
 ## Engine quirks (behaviour verified in practice)
 
-1. **Batch failures can partially commit.** The docs claim all-or-nothing,
-   but a batch whose step was refused by a guard ("not available right
-   now") kept steps before and after the refused one. After any failed
-   batch: re-inspect only the affected ids (minimum depth) before retrying,
-   or a retry duplicates instances.
+1. **Batch failures are atomic on 0.11.2 — re-verified.** Pass-2-era
+   behaviour (a guard refusal kept steps before and after the refused one)
+   no longer reproduces: on 0.11.2 both hard errors ("no such node") and
+   guard refusals roll the whole batch back. Note for scripted workers: a
+   guard refusal throws OUT of the batch call as an exception, so prior
+   steps' results are lost from the script's view even though nothing
+   committed — catch it, and never re-run a batch blind after an error.
 2. **Geometry overrides inside instances are partial.** Docs refuse all
-   geometry of layers inside instances; in practice padding, width/height,
-   fills, visibility and characters override fine, but `y` was refused on a
-   child while `x` on the same child worked, nested-instance position is
-   refused, and `absolute` is refused. Fix the geometry in the main
-   component, then re-create the instance — do not fight it.
-3. **Instances cache geometry from creation.** Master structure changes
-   propagate, but later position/size tweaks in the master may not.
-   Delete and re-create the instance to pick up new geometry.
+   geometry of layers inside instances; on 0.11.2 padding, width/height,
+   fills, visibility and characters override fine, but **both `x` and `y`
+   are now refused** (pass-2 saw `x` work), nested-instance position is
+   refused, and `absolute` is refused (verbatim: "A layer's position comes
+   from the main component in an instance: edit the main component, or
+   detach the instance"). Fix the geometry in the main component, then
+   re-create the instance — do not fight it.
+3. **Instances cache geometry from creation — but 0.11.2 propagates at
+   least master-child width changes.** Pass-14 probe: a master child width
+   change was read back through an existing instance immediately (after a
+   size-override reset). Keep the suspicion for position/size tweaks made
+   AFTER instance creation (pass-9 mobile strips went stale), and always
+   spot-check instances after master geometry edits instead of assuming
+   either direction.
 4. **`node.set` x/y silently no-ops on children of an auto-layout frame**
    (success reported, value unchanged). Move content via padding /
    mainAlign / crossAlign, or make the child `absolute` in the main.
@@ -129,11 +137,14 @@ a quirk has cost whole work orders.
     When a master paint carries opacity, overrides must pass the full paint
     object (`{type: "solid", color, opacity}`), not a bare hex string.
 
-22. **An MCP command called without explicit `ids` defaults to the app
-    selection and refuses.** Pass 10: one executor concluded `node.set`
+22. **Commands without `ids` are refused unless the catalog documents a
+    selection default.** Pass 10: one executor concluded `node.set`
     "requires interactive selection" and burned its budget — it had simply
-    omitted `ids`. Always pass `ids: [...]` to `node.set` / `fill.set` /
-    `set_properties`; there is no worker-visible selection context.
+    omitted `ids`. Pass-14 re-check on 0.11: `node.get` / `node.set`
+    without `ids` still refuse. The catalog is explicit per command: where
+    it says `ids? (default selection, …)` omission is fine; everywhere
+    else pass `ids: [...]`. There is no worker-visible selection context
+    worth relying on either way.
 
 23. **Spawn-time model outages cost zero document mutations.** Pass 10:
     `glm-5.3-flash` was intermittently unavailable at spawn (3 workers died
@@ -141,6 +152,19 @@ a quirk has cost whole work orders.
     errors never need a takeover survey — re-spawn directly on the fallback
     ladder. Also: `inkling-small:free` has no thinking variants (spawn with
     no `thinkingOptionId`); `glm-5.3-flash` uses `low`/`high`/`max`.
+
+24. **Editing a master child in place preserves instance overrides;
+    deleting/recreating it drops them.** Pass 14: resizing + re-binding the
+    masters' `interest-strip` child kept every per-instance fill override
+    (28 across the board frames) because the node id never changed. A
+    delete + re-create would have silently stripped them all. Prefer
+    in-place mutation of master children over structural replacement when
+    instances carry overrides on that child.
+
+25. **`node.create` ignores a top-level `fill` shorthand.** Pass-14 probe:
+    `node.create {type: "rectangle", fill: "#FF0000"}` is silently dropped
+    and the node gets the engine default (#D9D9D9). Paints must go through
+    `props: {fill: ...}` (or a follow-up `fill.set`).
 
 ## Suspected (verify before relying)
 
@@ -204,10 +228,12 @@ a quirk has cost whole work orders.
   batch.
 - **`batch` tool input shape is `{commands: [...]}`** (not a bare array,
   not `steps`); `run_command` takes `{command, params}`. Found in pass 13.
-- **`$step` references have no index syntax.** `{ $step: n, field: "ids" }`
-  works for array fields, but `ids[0]` fails batch validation — and the
-  batch is atomic, so nothing commits. When a creation result's first id
-  is needed, use two calls (or a second read).
+- **`$step` index syntax — fixed upstream in 0.11.** `field` now takes a
+  slash path (`{ $step: 1, field: "ids/0" }`), and steps can be named with
+  `as` and referenced with `{"$ref": "name"}` anywhere in later params
+  (mixable with `$step`; `field` also reaches keys like `"name"`). The
+  old two-call workaround is gone — build nested trees in one batch (0.11
+  docs, "Step references").
 - **`node.set x/y` on a vector re-normalizes its path data** to a 0-based
   bbox. `vector.create` keeps raw coordinates as offsets from the node
   origin. Recipe for X-style icons: path `M0 0L12 12M12 0L0 12` at node

@@ -1,6 +1,6 @@
 # FigCraft command catalog (cached)
 
-Generated: 2026-10-25 · CLI: figcraft-cli 0.10.0 · lines: 1202
+Generated: 2026-10-27 · CLI: figcraft-cli 0.11.2 · lines: 1238
 Regenerate: scripts/dump-commands.sh (see SKILL.md). Source of truth: figcraft-cli commands; the running app may have a different build — verify ids with `list_commands {filter: "..."}` ONLY if a run_command fails with unknown command.
 Search this file with grep. Do NOT call figcraft-app list_commands without a filter.
 
@@ -26,7 +26,7 @@ text.create*  Text
 vector.create*  Vector
     {path (SVG path data) | points [[x,y],..], closed?, x?, y?, width?, height? (scale the path; one keeps its proportion), parent?, props?}
 image.place*  Place image
-    {data (base64) | path, x?, y?, width?, height?, parent?, mode? (fill|fit|crop|tile)} → {id, image, width, height, imageProfile (its embedded colour profile; null: taken as sRGB)}
+    {data (base64) | path, x?, y?, width?, height?, parent?, target? (an existing layer: the image is added on top of its fills instead of making a layer), mode? (fill|fit|crop|tile)} → {id, image, width, height, imageProfile (its embedded colour profile; null: taken as sRGB)}
 frame.swapOrientation*  Swap orientation
     {ids?} (portrait ⇄ landscape: width and height trade places)
 frame.presets  List frame presets
@@ -145,6 +145,14 @@ fill.set*  Set fill
     {ids?, index?, paint | color, opacity?, visible?, blend?}
 stroke.set*  Set stroke
     {ids?, index?, paint | color, opacity?, visible?, blend?}
+fill.copy  Copy fill
+    {id?, index? (default the top fill)}
+fill.paste*  Paste fill
+    {ids?, index? (replace the fill there; without: add one)}
+stroke.copy  Copy stroke
+    {id?, index? (default the top stroke)}  its paint and the stroke's weight, alignment, sides, caps, joins and dashes
+stroke.paste*  Paste stroke
+    {ids?, index? (replace the stroke there; without: add one)}  the copied stroke's settings come with its paint
 fill.pattern*  Pattern fill
     {source (layer id), ids?, index? (default the top fill), tile? (grid|horizontalHex|verticalHex), scale? (1 = the source's size), spacing? [x, y], align? (start|center|end), opacity?}  the source layer tiled; it updates as the source changes
 stroke.widthProfile*  Width profile
@@ -157,18 +165,22 @@ effect.remove*  Remove effect
     {ids?, index}
 effect.set*  Set effect
     {ids?, index, effect {..}}
+effect.copy  Copy effect
+    {id?, index? (default the top effect)}
+effect.paste*  Paste effect
+    {ids?, index? (replace the effect there; without: add one)}
 grid.add*  Add layout grid
     {ids?, grid? {kind: grid|columns|rows, ..}}
 grid.remove*  Remove layout grid
     {ids?, index}
 export.add*  Add export setting
-    {ids?, setting? {size: 2x|512w|512h|{by: scale|width|height, value}, suffix?, format?: png|jpg|svg|pdf|webp, bleed? (PDF: points, or with a unit: "3mm", "0.125in", "9pt"), cropMarks?, bleedMarks?, cmyk? (PDF print options)}} (without a setting: 1x, then one scale step up with an "@2x"-style suffix)
+    {ids?, setting? {size: 2x|512w|512h|{by: scale|width|height, value}, suffix?, format?: png|jpg|svg|pdf|webp|xml (Android Vector Drawable), bleed? (PDF: points, or with a unit: "3mm", "0.125in", "9pt"), cropMarks?, bleedMarks?, cmyk? (PDF print options), vdCompat? (XML: bestEffort|exact|ignore)}} (without a setting: 1x, then one scale step up with an "@2x"-style suffix)
 export.update*  Edit export setting
-    {ids?, index, size? (2x|512w|512h|{by, value}), suffix?, format? (png|jpg|svg|pdf|webp), bleed? (PDF: points, or with a unit: "3mm", "0.125in", "9pt"), cropMarks?, bleedMarks?, cmyk? (PDF print options)}
+    {ids?, index, size? (2x|512w|512h|{by, value}), suffix?, format? (png|jpg|svg|pdf|webp|xml: Android Vector Drawable), bleed? (PDF: points, or with a unit: "3mm", "0.125in", "9pt"), cropMarks?, bleedMarks?, cmyk? (PDF print options), vdCompat? (XML: bestEffort|exact|ignore)}
 export.remove*  Remove export setting
     {ids?, index}
 command.batch  Run several commands
-    {label?, commands: [{command, params}]} (one undo step)
+    {label?, commands: [{command, params, as?}]} (one undo step)
 edit.repeat*  Repeat last command
     {}
 fill.move*  Move fill
@@ -330,23 +342,25 @@ file.new  New design file (Cmd+N)
 file.newBoard  New board
     {name?}  a board: sticky notes, shapes with text, connectors, marker and stamps on a light page
 file.open  Open (Cmd+O)
-    {path | data (base64) + name (tells the format; opens as a new unsaved document), variables? (REST: the local variables JSON as an object, JSON text or a path; default `<name>.variables.json` or `variables.json` next to the file)} (.figcraft, .json: FigCraft or REST API file JSON, .fig (best effort), .svg, .png, .jpg …); REST and .fig imports return `warnings`; a file opened anew returns `summary` {name, pages, layers, images} (one that was already open just returns its `index`)
+    {path | data (base64) + name (tells the format; opens as a new unsaved document), variables? (REST: the local variables JSON as an object, JSON text or a path; default `<name>.variables.json` or `variables.json` next to the file)} (.figcraft, .json: FigCraft or REST API file JSON, .fig (best effort), .sketch (Sketch 48 or newer, best effort), .svg, .png, .jpg …); REST, .fig and .sketch imports return `warnings`; a file opened anew returns `summary` {name, pages, layers, images} (one that was already open just returns its `index`)
 file.openRecent  Open recent
     {path? | index? (into the list), clear? (forget them all), remove? (a path: forget that one)}  opens a recent file; a file that no longer exists is dropped from the list. Returns the list, newest first: {files: [{path, name, exists}]} (opening returns what `file.open` does)
 file.save  Save (Cmd+S)
-    {path?} (programmatic saves need a path the first time); a .fig path writes an experimental export copy of the shown document with `warnings`, keeping the native path, unsaved changes and version preview
+    {path?, overwrite? (replace what another app wrote to the file since it was opened or saved: without it that save is refused)} (programmatic saves need a path the first time); a .fig path writes an experimental export copy of the shown document with `warnings`, keeping the native path, unsaved changes and version preview
 file.saveAs  Save as (Shift+Cmd+S)
-    {path} (no extension adds .figcraft); a .fig path writes an experimental export copy of the shown document with `warnings`, keeping the native path, unsaved changes and version preview
+    {path | data: true (no path: returns the file as base64 `data` with its `name`, for a download)} (no extension adds .figcraft); a .fig path writes an experimental export copy of the shown document with `warnings`, keeping the native path, unsaved changes and version preview
+file.markSaved  Mark saved
+    {}  clears the unsaved changes of the active tab's file and its branch tabs: run it once the file from `file.saveAs {data: true}` was delivered (a refused download keeps them)
 file.export  Export (Shift+Cmd+E)
-    {ids? (default selection, else the page), format? (png|jpg|svg|pdf|webp, or fig: the whole file as .fig, experimental, with `warnings` for what was left out; other apps may not open every file), scale? (default 1) | size? (2x|512w|512h or {by: scale|width|height, value}: a scale, or a width or height in pixels), path? (else returns base64 `data`), bleed? (PDF: points, or with a unit: "3mm", "0.125in", "9pt"), cropMarks?, bleedMarks?, cmyk? (PDF print options)}
+    {ids? (default selection, else the page), format? (png|jpg|svg|pdf|webp|xml (an Android Vector Drawable, with `warnings` for what it changed or left out), or fig: the whole file as .fig, experimental, with `warnings` for what was left out; other apps may not open every file), scale? (default 1) | size? (2x|512w|512h or {by: scale|width|height, value}: a scale, or a width or height in pixels), path? (else returns base64 `data`), bleed? (PDF: points, or with a unit: "3mm", "0.125in", "9pt"), cropMarks?, bleedMarks?, cmyk? (PDF print options), svgIdAttribute? (SVG ids, XML android:name), vdCompat? (XML: bestEffort (default: approximate with a warning)|exact (leave out what can't be exact, with a warning)|ignore (no warnings))}
 file.exportLayers  Export layers
-    {ids? (default the selection, else every layer on the page with export settings), assets? (true: the Inspect tab's assets in and under them instead: layers with export settings, icons as SVG, images as PNG), dir? (folder to write into; else each file comes back as base64 `data`), bleed? (PDF: points, or with a unit: "3mm", "0.125in", "9pt"), cropMarks?, bleedMarks?, cmyk? (PDF print options): for every PDF instead of each setting's own}  every layer once per export setting, named `<layer><suffix>.<format>` ("@2x" when a scaled export has no suffix; repeats get " 2"; slashes in a layer name make folders). Returns {files: [{name, id, bytes, path | data}], skipped (layers without settings)}
+    {ids? (default the selection, else every layer on the page with export settings), assets? (true: the Inspect tab's assets in and under them instead: layers with export settings, icons as SVG, images as PNG), dir? (folder to write into; else each file comes back as base64 `data`), zip? (no dir: the files come back together as one base64 zip `data` instead), bleed? (PDF: points, or with a unit: "3mm", "0.125in", "9pt"), cropMarks?, bleedMarks?, cmyk? (PDF print options): for every PDF instead of each setting's own, vdCompat? (bestEffort|exact|ignore: for every XML instead of each setting's own)}  every layer once per export setting, named `<layer><suffix>.<format>` ("@2x" when a scaled export has no suffix; repeats get " 2"; slashes in a layer name make folders). Returns {files: [{name, id, bytes, path | data, warnings (XML only)}], skipped (layers without settings), data? (zip)}
 file.exportSvg  Export selection as SVG
     {ids?, path?}
 file.exportFramesPdf  Export frames to PDF
     {path?, page? (page id, default the current page), bleed? (PDF: points, or with a unit: "3mm", "0.125in", "9pt"), cropMarks?, bleedMarks?, cmyk? (PDF print options)}  every top-level frame in reading order, one PDF page each; returns base64 `data` without a path
 file.import*  Import (Shift+Cmd+I)
-    {path | data (base64) + name, x?, y?, center? (SVG: centre it on x, y), variables? (REST: the local variables JSON as an object, JSON text or a path)}  SVG becomes an editable frame (shapes, text, gradients, masks, effects; with `warnings` for what it left out), images become image layers, .figcraft, REST API file JSON and .fig pages are appended with their variables and flows (REST and .fig: with `warnings`; those return `summary` {name, pages, layers, images} of the file read)
+    {path | data (base64) + name, x?, y?, center? (SVG: centre it on x, y), variables? (REST: the local variables JSON as an object, JSON text or a path)}  SVG becomes an editable frame (shapes, text, gradients, masks, effects; with `warnings` for what it left out), images become image layers, .figcraft, REST API file JSON, .fig and .sketch pages are appended with their variables and flows (REST, .fig and .sketch: with `warnings`; those return `summary` {name, pages, layers, images} of the file read)
 file.placeImage*  Place image (Shift+Cmd+K)
     {path | data, x?, y?}
 file.close  Close tab (Cmd+W)
@@ -544,7 +558,7 @@ pref.userName  Your name in comments
 pref.publishServer  Server for online sharing
     {url?: ws://host:port/ or wss://host/path/ (no key; empty: online sharing off; omit: back to the built-in server)} → {url, default (the built-in server)}: where Share ▸ Online keeps files and where join codes are asked
 pref.language  Interface language
-    {language: system|en|cs|ru|es|es-419|fr|de|pt-BR|ja|ka|ko|zh-Hans|…; else English}
+    {language: system|en|cs|ru|es|es-419|fr|de|pt-BR|ja|ka|ko|vi|zh-Hans|…; else English}
 app.preferences  Preferences (Cmd+,)
     {}
 app.actions  Actions (Cmd+K)
@@ -670,7 +684,7 @@ text.paragraphIndent*  Paragraph indent
 text.paragraphSpacing*  Paragraph spacing
     {spacing (px), ids?}
 text.maxLines*  Max lines
-    {lines (0 = no limit; truncates), ids?}
+    {lines (0 = no limit; truncates: auto-height text hugs up to that many lines, other text becomes a truncating box), ids?}
 text.setFeatures*  OpenType features
     {features: {tag: bool | null (font default)}, replace? (clear others first), id?/ids?}
 text.setVariations*  Variable font axes
@@ -778,7 +792,7 @@ variable.deleteCollection*  Delete collection
 variable.resetOverride*  Reset variable override
     {variable (a variable of an extended collection inherited from the collection it extends), mode? (id or name; every overridden mode when omitted)}  the value follows the inherited one again
 variable.export  Export variables
-    {collections? [ids or names; default every collection of this file, not library copies], format? (json (default): the local variables JSON that variable.import reads | css: custom properties, the default mode on :root and each other mode on [data-<collection>="<mode>"]; numbers in px unless layers or scopes use them as opacity or font weight), path? (write it there)}  → {text}, or {path} when written
+    {collections? [ids or names; default every collection of this file, not library copies], format? (json (default): the local variables JSON that variable.import reads | css: custom properties, the default mode on :root and each other mode on [data-<collection>="<mode>"]; numbers in px unless layers or scopes use them as opacity or font weight | tailwind: a Tailwind CSS v4 stylesheet, the default mode as an @theme block named the way inspect.code's tailwind utilities read them: --color-*, --radius-*, --text-*, --spacing-*, --font-*, unique per file) | dart: a Dart file for Flutter, a class of constants per collection and mode (Color, double, String, bool), aliases resolved), path? (write it there)}  → {text}, or {path} when written
 variable.import*  Import variables
     {variables (the local variables JSON, as variable.export writes it: an object, JSON text or a path; `variableCollections` and `variables` under `meta` or at the top level)}  collections join this file's collection of the same name (values by mode name; new modes and variables are added, a variable of another type is skipped), others are added  → {collections (added), variables (added), updated, warnings (also when it holds no variables, or fewer than its collections list)}
 component.create*  Create component (Alt+Cmd+K)
@@ -876,7 +890,7 @@ library.setVariableMode*  Set library variable mode
 library.extendCollection*  Extend library collection
     {library, collection (id or name of a published collection), name? (default "<name> (extended)")}  → {id}: a collection of this file with the library collection's modes and variables (they follow its updates); override their values per mode with variable.set (variable.resetOverride goes back to the inherited value) and add variables of its own
 proto.interaction.add*  Add interaction
-    {id?, trigger? {type: onClick|onHover|onPress|onDrag|mouseEnter|mouseLeave|mouseDown|mouseUp|afterDelay {ms}|keyPress {key (a key or a combination: Shift+K, Ctrl+Alt+Delete; or a controller button: Gamepad A|B|X|Y|LB|RB|LT|RT|View|Menu|LS|RS|Up|Down|Left|Right|Home)}}, action {type: navigate {preserveScroll?}|back|scrollTo {offset? [x, y] (where the layer ends up from the top-left)}|openOverlay {position?, offset? [x, y] (position manual: the overlay's top-left from the top-left of the layer that opens it; without it, right below that layer), close_on_outside? (default true), background?}|swapOverlay|closeOverlay|openUrl {url}|changeTo|setVariable {variable, value | expression (text, e.g. "count + 1")}|setVariableMode {collection, mode}|conditional {blocks [{condition? | expression? (text, e.g. "count >= 3"), actions}]}, dest?}, actions? [..], transition? {type: instant|dissolve|smartAnimate|moveIn|moveOut|push|slideIn|slideOut, direction?: left|right|top|bottom}, durationMs?, easing? linear|easeIn|easeOut|easeInOut|easeInBack|easeOutBack|easeInOutBack|gentle|quick|bouncy|slow|{customBezier {x1, y1, x2, y2}}|{customSpring {mass, stiffness, damping}}}, delayMs? (mouse enter, leave, down and up: how long after the gesture the actions run, up to 600000)} — or {id, dest} for a click-navigate. Returns {index}
+    {id?, trigger? {type: onClick|onHover|onPress|onDrag|mouseEnter|mouseLeave|mouseDown|mouseUp|afterDelay {ms}|keyPress {key (a key or a combination: Shift+K, Ctrl+Alt+Delete; or a controller button: Gamepad A|B|X|Y|LB|RB|LT|RT|View|Menu|LS|RS|Up|Down|Left|Right|Home)}}, action {type: navigate {preserveScroll?}|back|scrollTo {offset? [x, y] (where the layer ends up from the top-left)}|openOverlay {position?, anchor? screen|triggerInside|triggerOutside (default screen; the trigger ones measure the position preset on the layer that opens the overlay: outside puts top presets above it and bottom presets below it, edges lined up), offset? [x, y] (position manual: the overlay's top-left from the top-left of the layer that opens it; without it, right below that layer), close_on_outside? (default true), background?}|swapOverlay|closeOverlay|openUrl {url}|changeTo|setVariable {variable, value | expression (text, e.g. "count + 1")}|setVariableMode {collection, mode}|conditional {blocks [{condition? | expression? (text, e.g. "count >= 3"), actions}]}, dest?}, actions? [..], transition? {type: instant|dissolve|smartAnimate|moveIn|moveOut|push|slideIn|slideOut, direction?: left|right|top|bottom}, durationMs?, easing? linear|easeIn|easeOut|easeInOut|easeInBack|easeOutBack|easeInOutBack|gentle|quick|bouncy|slow|{customBezier {x1, y1, x2, y2}}|{customSpring {mass, stiffness, damping}}}, delayMs? (mouse enter, leave, down and up: how long after the gesture the actions run, up to 600000)} — or {id, dest} for a click-navigate. Returns {index}
 proto.interaction.clear*  Remove all interactions
     {ids?}
 proto.interaction.remove*  Remove interaction
@@ -1018,7 +1032,7 @@ shapeBuilder.remove*  Remove regions
 shapeBuilder.mode  Shape builder mode
     {mode: merge|remove} (what a click does; Alt does the other)
 inspect.code  Code for layer
-    {id?, language?: css|html|react|leptos|swiftui|compose (default css; html, react and leptos are the whole layer tree; components take their properties as parameters, instances pass their values; a component connected to code (codeConnect.set) gives its import and snippet instead), unit?: px|rem (CSS, HTML, React and Leptos; default px), rootFontSize? (rem: pixels per rem, default 16)} → {code, language, connected}
+    {id?, language?: css|html|react|leptos|vue|tailwind|swiftui|compose|arkui (default css; html, react, leptos and vue are the whole layer tree; components take their properties as parameters, instances pass their values; a component connected to code (codeConnect.set) gives its import and snippet instead; tailwind is React with Tailwind CSS v4 utilities for pages: fluid auto layout boxes, instances inlined with their overrides, bound variables as theme utilities), mobile? (tailwind: a mobile frame with the same layer names; the code is mobile first with the desktop layer's classes behind lg:), unit?: px|rem (CSS, HTML, React, Leptos and Vue; default px), rootFontSize? (rem: pixels per rem, default 16)} → {code, language, connected}
 inspect.readyForDev  Ready for dev
     {status?: readyForDev|changed|completed|any (default readyForDev; changed: ready for dev and changed since marked), page? (page id; default every page)} → {items: [{id, name, page, status, changed}]}  frames and sections by handoff status (set it with `node.set {devStatus}`)
 inspect.assets  Inspect assets
@@ -1026,11 +1040,11 @@ inspect.assets  Inspect assets
 inspect.properties  Inspect properties
     {id?, colorFormat?: hex|rgb|css|hsl|hsb (default hex)} → {sections: [{title, rows: [{label, value, color?, token?}]}]}  layout (positions from the frame around the layer), auto layout, typography, fills, strokes and effects, with style and variable names
 inspect.componentCode  Component code
-    {id? (component, set or instance; default the selection), language?: react|leptos|swiftui|compose (default react)} → {component, name, set, properties: [{name, param, type, default, value? (instances)}], definition, usage? (instances; the connected snippet when the component is connected to code), connected: {importPath, name, template, import, code} | null}
+    {id? (component, set or instance; default the selection), language?: react|leptos|vue|swiftui|compose|arkui (default react)} → {component, name, set, properties: [{name, param, type, default, value? (instances)}], definition, usage? (instances; the connected snippet when the component is connected to code), connected: {importPath, name, template, import, code} | null}
 component.playground  Component playground
-    {id? (an instance, a component or a component set; default the selection), properties? {name: value} (variant, boolean, text and instance-swap properties, as instance.setProperties takes them), language? css|html|react|swiftui|compose (default react), path? (write the preview there as a PNG), scale? (the PNG's, default 2)} → {component, properties: [{name, type, options?, value}], language, code, width, height, path?}  the component with those property values, tried on a copy: its code and its look. Nothing in the document changes
+    {id? (an instance, a component or a component set; default the selection), properties? {name: value} (variant, boolean, text and instance-swap properties, as instance.setProperties takes them), language? css|html|react|leptos|vue|swiftui|compose|arkui (default react), path? (write the preview there as a PNG), scale? (the PNG's, default 2)} → {component, properties: [{name, type, options?, value}], language, code, width, height, path?}  the component with those property values, tried on a copy: its code and its look. Nothing in the document changes
 codeConnect.set*  Connect to code
-    {id? (component, set or instance; default the selection), language?: react|leptos|swiftui|compose (default react), importPath?, name? (default the generated name), template? (default a call passing every property)}  links the component (its set, for a variant) to its code component; fields left out keep their current value. Placeholders: {property} (its name or parameter name) and {property ? "a" : "b"}; other {…} stay as written  → {component, language, code (the snippet for the layer), unknown (placeholder names that aren't properties)}
+    {id? (component, set or instance; default the selection), language?: react|leptos|vue|swiftui|compose|arkui (default react), importPath?, name? (default the generated name), template? (default a call passing every property)}  links the component (its set, for a variant) to its code component; fields left out keep their current value. Placeholders: {property} (its name or parameter name) and {property ? "a" : "b"}; other {…} stay as written  → {component, language, code (the snippet for the layer), unknown (placeholder names that aren't properties)}
 codeConnect.remove*  Disconnect from code
     {id? (component, set or instance; default the selection), language? (omit: every language)}  → {component, removed}
 codeConnect.export  Export code connections
@@ -1074,7 +1088,7 @@ measure.padding  Measure auto layout padding
 collab.diff  Show sync changes
     {against? (undo: the last undoable action, the default | saved: since the last save)} → the changes a live session would send, their count and binary size
 branch.create  Create branch
-    {name?}  a copy of the file to work on separately, opened in a new tab; it remembers the file as it is now (its base) → {id, name, index (its tab)}
+    {name?}  a copy of the file to work on separately, opened in a new tab; it remembers the file as it is now (its base); in a live session it stays yours → {id, name, index (its tab)}
 branch.list  List branches
     {}  the branches of the file shown (or of the file a branch tab belongs to), oldest first → [{id, name, time (Unix seconds), state: active|merged|archived, index? (its open tab)}]
 branch.open  Open branch
@@ -1082,9 +1096,9 @@ branch.open  Open branch
 branch.review  Review branch
     {id? (default: the branch tab shown)}  what changed on the branch and on the main file since the branch was made or last updated from main, and where they conflict (the same property changed on both sides, or a layer deleted on one side and edited on the other) → {id, name, state, branch: {layers, document, truncated}, main: {…}, conflicts: [{key, id?, name, property, branch, main, deletedBy?}]}
 branch.updateFromMain  Update from main
-    {id?, resolutions? ({<conflict key>: "branch" | "main"})}  bring the main file's changes since the branch was made into the branch; refused while a conflict has no resolution. Not undoable (the branch tab's undo history starts over) → {updated, changes, conflicts}
+    {id?, resolutions? ({<conflict key>: "branch" | "main"})}  bring the main file's changes since the branch was made into the branch (a version in its history); refused while a conflict has no resolution. Not undoable (the branch tab's undo history starts over) → {updated, changes, conflicts}
 branch.merge  Merge branch
-    {id?, resolutions? ({<conflict key>: "branch" | "main"})}  merge the branch into the main file as one undo step, then archive it and show the main file; refused while a conflict has no resolution → {merged, changes, conflicts, index}
+    {id?, resolutions? ({<conflict key>: "branch" | "main"})}  merge the branch into the main file as one undo step (in a live session one edit everyone gets; refused on a view link), then archive it and show the main file; refused while a conflict has no resolution → {merged, changes, conflicts, index}
 branch.archive  Archive branch
     {id?}  set the branch aside without merging (it stays in the file and can still be opened) and close its tab
 plugin.list  List plugins
@@ -1117,8 +1131,12 @@ widget.insert  Insert widget
     {plugin (a widget plugin's id), x?, y? (top-left; default: centred in the view), fuel?} the plugin draws it; one undo step → {id, plugin, state, targets, output, logs, calls, fuel}
 widget.click  Click widget
     {id (a widget or a layer in one), target (see widget.list), fuel?} calls the widget's plugin back, which redraws it; one undo step → like widget.insert
+widget.setText  Edit widget field
+    {id (a widget or a layer in one), field (see widget.list), value (text, up to 1000 characters), fuel?} sets an editable field as typing in it would: the value goes into the state under the field's name and the plugin is called back; one undo step → like widget.insert
+widget.menu  Widget menu
+    {id (a widget or a layer in one), item (see widget.list), value? (a toggle: on or off, default the opposite of now; a colour: one of its options), fuel?} picks an item of the widget's property menu: the plugin is called back; one undo step → like widget.insert
 widget.list  List widgets
-    {} → {widgets: [{id, plugin, name, page, state, targets}]}
+    {} → {widgets: [{id, plugin, name, page, state, targets, fields, menu}]}
 collab.host  Start live session
     {port? (default 47900, else any free port), bind?: "local" (this machine, default) | "lan" (the local network) | an IP address} → the open file's session: {session, link, url (invites: they carry the secret token), address, …}; sessions are per file, so other files' sessions go on (a session this file was in ends)
 collab.share  Share with a join code
@@ -1174,7 +1192,9 @@ board.nextSticky*  Next sticky note (Shift+Cmd+Enter)
 board.shape*  Shape with text
     {shape: rectangle|roundedRectangle|ellipse|diamond|triangle|speechBubble|chevron, x, y, width?, height? (default 160), text?, color?, parent?} → {id, text}
 board.connector*  Connector
-    {from, to (each a layer id or {x, y} on the page), fromSide?, toSide? (auto|top|right|bottom|left), style?: straight|elbow, startCap?, endCap? (none|lineArrow|triangleArrow|circleFilled|diamondFilled…; default an arrow at the end), label?} → {id, label?}  a line that follows the layers it joins
+    {from, to (each a layer id or {x, y} on the page), fromSide?, toSide? (auto|top|right|bottom|left), style?: straight|elbow|curved, startCap?, endCap? (none|lineArrow|triangleArrow|circleFilled|diamondFilled…; default an arrow at the end), label?} → {id, label?}  a line that follows the layers it joins
+board.reattach*  Reattach connector
+    {id? (a connector; default the selection), end: from|to, target (a layer id, or {x, y} on the page to leave the end free), side? (auto|top|right|bottom|left)} → {id}  moves one end of a connector
 board.label*  Connector label
     {id (a connector; default the selection), text (empty removes it)} → {id, label}
 board.stamp*  Stamp
@@ -1184,13 +1204,13 @@ board.ink*  Marker stroke
 board.setColor*  Board color
     {ids?, color (a board colour name or hex)}  stickies and shapes take it as their fill, connectors and ink as their line
 board.setStyle*  Board style
-    {ids?, shape? (shapes with text), fontSize? (their text), style?: straight|elbow, startCap?, endCap? (connectors)}
+    {ids?, shape? (shapes with text), fontSize? (their text), style?: straight|elbow|curved, startCap?, endCap? (connectors)}
 tool.sticky  Sticky note (Q)
     {color?} (a click places a sticky and starts typing in it)
 tool.shape  Shapes (B)
     {shape?} (a click places a shape with text)
 tool.connector  Connector (X)
-    {style?: straight|elbow} (drag from one object to another)
+    {style?: straight|elbow|curved} (drag from one object to another)
 tool.marker  Marker (M)
     {color?}
 tool.highlighter  Highlighter (U)
@@ -1199,4 +1219,20 @@ tool.eraser  Eraser (E)
     {} (drag over marker and highlighter strokes to remove them)
 tool.stamp  Stamp (W)
     {stamp?} (a click places the stamp)
+board.timer  Timer
+    {action: start|pause|resume|add|stop, minutes? (start: default 5; add: default 1; up to 1440)} → the timer's state (as board.timerState)  one countdown per board, the same for everyone in a live session
+board.timerState  Timer state
+    {} → {state: off|running|paused|done, left (ms), text (m:ss), ends? (ms since 1970, while running)}
+board.vote  Voting session
+    {action: start|cast|retract|end|clear, votes? (start: per person, 1–99, default 3), on? (start: all|stickies|selection; default all), ids? (start with on: selection; default the selection), id (cast, retract: the object), voter? (default you)} → the vote's state (as board.voteResults)  one vote at a time; others' votes show once it ends
+board.voteResults  Voting results
+    {voter?} → {state: off|running|ended, votesPerPerson, on, by, left (your votes left), mine [{id, votes}], voters, results? [{id, name, votes, rank}] (once ended, most votes first)}
+board.table*  Table
+    {rows?, columns? (default 3 × 3, or the size of `cells`; at most 50 × 20), cells? ([[text…]…] row by row), x?, y? (its top-left on the page; default centred in the view)} → {id, rows, columns, cells: [[text id…]…]}
+board.tableEdit*  Edit table
+    {id? (a table or a layer in one; default the selection), action: addRow|addColumn|removeRow|removeColumn, index? (where the new one goes, or which one goes; default the last)} → {id, rows, columns, cells}
+board.template*  Board template
+    {name (a template id from board.templates), x?, y? (its top-left on the page; default centred in the view)} → {name, ids}  its sections, stickies, shapes, connectors and text, selected
+board.templates  List board templates
+    {} → [{id, name, description, width, height}]
 ```

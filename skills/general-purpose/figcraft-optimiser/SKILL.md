@@ -23,13 +23,15 @@ one orchestrator session held 90% of a run's cost (466 turns × 221M
 cache-read tokens) by doing visual QA itself and re-spawning workers in a
 loop. The planner rules below exist because of that.
 
-## Server-side digesting (landed Oct 2026)
+## Server-side digesting (merged upstream as M0.9, Oct 2026)
 
-FigCraft build `sergii/mcp-optimisations` (commit `98ecb072`; reference
-`docs/mcp.md` → "Digesting command results") digests `run_command`,
-`batch`, `create_node` and `set_properties` echoes to a 4 KiB budget by
-default. Most results are unchanged; large ones come back squeezed with a
-`$trimmed` marker. What this changes for this skill:
+Result digesting first shipped in the side build `sergii/mcp-optimisations`
+(commit `98ecb072`) and is now merged upstream (M0.9, commit `50ed6368`,
+verified live on CLI/app 0.11.2). Reference: `docs/mcp.md` → "Digesting
+command results". It digests `run_command`, `batch`, `create_node` and
+`set_properties` echoes to a 4 KiB budget by default. Most results are
+unchanged; large ones come back squeezed with a `$trimmed` marker. What
+this changes for this skill:
 
 - Blanket result projection is no longer a *size* rule — the server
   handles size. Projection is now about relevance only (rule 3).
@@ -40,6 +42,39 @@ default. Most results are unchanged; large ones come back squeezed with a
 - Tree tools (`inspect_document` / `get_node`) are untouched (8 MiB
   default) — minimum-`depth` reads still matter (rule 4).
 - Bare `list_commands` is still uncapped upstream — rule 1 stands.
+
+## 0.11 capabilities worth using (verified live Oct 2026, CLI 0.11.2)
+
+Diffed against the 0.10 catalog; full list in the regenerated
+`references/command-catalog.md`.
+
+- **`variable.export {format: "tailwind"}`** — a Tailwind v4 `@theme`
+  stylesheet from the variable collections (plus `dart`). Direct route for
+  token-parity checks between the design file and a Tailwind codebase:
+  export, diff against the code's theme block, no pixel QA needed for
+  colour drift. Dark modes land as `[data-theme="<Mode>"]` — map the
+  selector to the codebase's dark convention (`.dark` in this repo) when
+  diffing.
+- **`inspect.code {language: "tailwind", mobile?}`** (also `vue`, `arkui`)
+  — React + Tailwind v4 utilities for a page/frame, bound variables as
+  theme utilities, instances inlined with overrides. Cheap code-parity
+  reads without screenshots.
+- **Batch step references**: `as` + `{"$ref": "name"}` and `field:
+  "ids/0"` slash paths — nested trees in one call (see quirks).
+- **`file.export {svgIdAttribute}`** is now a documented parameter (the
+  QA flags this skill pins were undocumented before; behaviour
+  unchanged). Export formats gained `xml` (Android Vector Drawable, with
+  `vdCompat?`), and `file.exportAssets` gained `zip?`.
+- **`file.save {overwrite?}`** refuses to clobber changes another app
+  wrote since open/save — good guard for parallel workers; `file.saveAs
+  {data: true}` + **`file.markSaved`** round-trips a file without leaving
+  phantom unsaved state (useful in headless CLI QA flows).
+- **`image.create {target?}`** adds an image on top of an existing
+  layer's fills instead of making a new layer.
+- **FigBoard-only (not used by design-file passes):** `board.table*`,
+  `board.template*`, `board.timer*`, `board.vote*`, `board.reattach`,
+  connector `curved` style, `widget.setText` / `widget.menu`.
+- **`.sketch` import** (48+, best effort) via `file.open` / `file.import`.
 
 ## Roles
 
@@ -164,9 +199,11 @@ context in the run and has no QA worker behind it:
    instead of `list_commands`. Only re-list live with a `filter` when
    `run_command` fails with unknown command.
 2. **Batch by default.** One `execute` call = one batch attempt. Compose
-   multi-step trees with `$step` references — never guess ids across turns.
-   The batch shape is `{commands: [{command, params}], label}` — the key is
-   `params`, not `args`.
+   multi-step trees with step references — never guess ids across turns.
+   Name a step with `as` and use `{"$ref": "name"}` (or `{"$step": n}` with
+   `field: "ids/0"` for list items) in later steps; see quirks #11 and the
+   0.11 note. The batch shape is `{commands: [{command, params}], label}` —
+   the key is `params`, not `args`.
 3. **Project for relevance, not size.** The server digests big
    `run_command` / `batch` / `create_node` / `set_properties` echoes to
    4 KiB by default (`$trimmed` names what went; `full: true` or
@@ -201,10 +238,11 @@ context in the run and has no QA worker behind it:
 ## Quirks
 
 Engine quirks and known failure modes live in `references/quirks.md` — read
-it before writing any batch. Highlights: batches can partially commit
-despite documented all-or-nothing semantics; geometry overrides inside
-instances are partial; `node.set` x/y silently no-ops in auto layout
-children; instance geometry is cached from creation.
+it before writing any batch. Highlights: batches are atomic on 0.11.2 but a
+guard refusal throws out of the call (catch it); geometry overrides inside
+instances are partial (position is refused, size/fills work); `node.set` x/y
+silently no-ops on auto-layout children; master geometry changes may not
+reach existing instances — spot-check after master edits.
 
 ## Files
 

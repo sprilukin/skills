@@ -18,9 +18,10 @@ if [[ ! -x "$CLI" ]]; then
 fi
 
 {
+  CMD_COUNT="$("$CLI" commands | wc -l | tr -d ' ')"
   echo "# FigCraft command catalog (cached)"
   echo
-  echo "Generated: $(date -u +%Y-%m-%d) · CLI: $("$CLI" --version) · lines: $(("$("$CLI" commands | wc -l)" + 8))"
+  echo "Generated: $(date -u +%Y-%m-%d) · CLI: $("$CLI" --version) · lines: $((CMD_COUNT + 8))"
   echo "Regenerate: scripts/dump-commands.sh (see SKILL.md). Source of truth: figcraft-cli commands; the running app may have a different build — verify ids with \`list_commands {filter: \"...\"}\` ONLY if a run_command fails with unknown command."
   echo "Search this file with grep. Do NOT call figcraft-app list_commands without a filter."
   echo
@@ -29,4 +30,4 @@ fi
   echo '```'
 } > "$OUT"
 
-echo "Wrote $OUT ($("$(wc -l < "$OUT")") lines)"
+echo "Wrote $OUT ($(wc -l < "$OUT" | tr -d ' ') lines)"
