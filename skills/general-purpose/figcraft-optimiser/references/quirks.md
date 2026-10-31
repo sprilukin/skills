@@ -239,29 +239,49 @@ session's measurements.
     a 22-child frame at depth 2 cost ~15k tokens. Never request `layout`,
     `fills`, `strokes` or `boundVariables` in a tree read; use them only
     with `depth: 0`/`1` on one node. Geometry:
-    `["name","type","x","y","width","height"]`.
+    `["name","type","x","y","width","height"]`. Newer builds (checkout at
+    0.13.1 + 17 commits, headless-verified Nov 1 2026) take dotted
+    `fields: ["layout.gap"]` on `node.get` and `layout: false` to drop auto
+    layout; the MCP `get_node` tool schema may still list top-level keys
+    only — use `run_command node.get` for those. `compact: true` was
+    accepted but its effect was not confirmed.
 35. **Never read the Design System page at `depth >= 2`** (~200 masters;
     depth 2 cost ~8k tokens). Grep `references/inventory.md`, or
     `node.find {root: <section>, name}`. `depth: 1` of one section is fine.
-36. **`edit.duplicate {map:true}` on a frame maps every descendant** (~80
-    entries per call, unused). Pass `map:true` only when you will use the
-    child ids; otherwise `node.find {root}` afterwards.
+36. **`edit.duplicate {map:true}` maps every descendant on older builds**
+    (~80 entries per call, unused). Newer builds (verified headless Nov 1
+    2026) map roots only by default; opt in with `mapDepth: n | "all"` or
+    `mapNames: ["label"]`. Pass them only when you will use the ids.
 37. **Instance child ids follow the master**, with a constant id offset
     per instance — valid only for instances created in one batch, fragile
     if the master is edited. Prefer `node.find {root: <instance>, name}`;
-    record the id map in the state file.
+    record the id map in the state file. Newer builds: `node.resolve {root,
+    path: "footer/save/label"}` returns the id by layer-name path
+    (verified headless Nov 1 2026) — prefer it to arithmetic.
 38. **`node.create` takes `visible` only inside `props`.** A top-level
     `visible` fails the whole batch ("unknown parameter"); a failure at
-    step 8 of 21 cost a ~3k-token resend.
+    step 8 of 21 cost a ~3k-token resend. Newer builds document a
+    top-level `visible` on `node.create`; `batch {dryRun: true}` runs every
+    step, returns the results and rolls back (verified headless Nov 1
+    2026) — dry-run long batches first.
 39. **`component.create` / `component.detach` take literal ids, not
-    `{$ref}`.** Create the node in one batch, call `component.create` in
-    the next.
+    `{$ref}`** on older builds: create the node in one batch, call
+    `component.create` in the next. Newer builds accept `{"$ref": name,
+    "field": "id"}` (with `as` on the step, not in `params`) — verified
+    headless Nov 1 2026.
 40. **Recipe — Dark twin of a component.** `edit.duplicate {ids:[masterId],
     map:true}` (gives an instance) → `component.detach` →
     `component.create` → `node.set {name, x, y}` → `variable.setMode
     {collection:"Theme", mode:"Dark"}` → fix remaining literal
     (non-variable) fills by id. The `map` is what finds the literal-fill
-    ids. Verified on the row and dialog masters.
+    ids. Verified on the row and dialog masters. Newer builds:
+    `variable.cloneWithMode {ids:[masterId], collection:"Theme",
+    mode:"Dark"}` does the duplicate, detach, rename and setMode in one
+    step and keeps variable bindings, but returns a FRAME (`Name (Dark)`) —
+    still run `component.create` and `node.set {name, x, y}` after it
+    (verified headless Nov 1 2026). `node.createTree {…, children, as}`
+    builds a whole subtree in one step (its `refs` stayed empty when only
+    the root had `as`).
 41. **Hidden children in auto layout can leave an instance at the
     master's height.** Re-set the height explicitly (`EmptyState` after
     its button was hidden).

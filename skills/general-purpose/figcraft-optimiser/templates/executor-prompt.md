@@ -33,7 +33,8 @@ genuinely impossible as written, stop and report it — do not improvise.
   `strokes` or `boundVariables` in a tree read — only with `depth: 0`/`1`
   on one node (geometry: `["name","type","x","y","width","height"]`); never
   read the Design System page at `depth >= 2`; pass `map:true` to
-  `edit.duplicate` only when you will use the child ids; grep
+  `edit.duplicate` only when you will use the child ids (newer builds:
+  `mapDepth`/`mapNames`; `node.resolve` for instance children); grep
   `<skill-dir>/references/inventory.md` for master names before looking
   anything up in the document.
 - Master build recipe: follow SKILL.md "Building masters" (reuse by

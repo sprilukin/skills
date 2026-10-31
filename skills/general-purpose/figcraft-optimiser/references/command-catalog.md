@@ -1,12 +1,14 @@
 # FigCraft command catalog (cached)
 
-Generated: 2026-10-31 · CLI: figcraft-cli 0.13.1 · lines: 1266
+Generated: 2026-10-31 · CLI: figcraft-cli 0.13.1 · lines: 1272
 Regenerate: scripts/dump-commands.sh (see SKILL.md). Source of truth: figcraft-cli commands; the running app may have a different build — verify ids with `list_commands {filter: "..."}` ONLY if a run_command fails with unknown command.
 Search this file with grep. Do NOT call figcraft-app list_commands without a filter.
 
 ```
 node.create*  Create layer
-    {type: rectangle|ellipse|polygon|star|line|arrow|vector|text|frame|section|component|slice, x?, y? (relative to the parent frame; groups don't count), width?, height?, parent? (id; default: the page), index?, name?, text? | characters? (for text), path? | points? (vector: SVG path data | [[x,y],..]; x/y move their own origin, so the layer's left/top is x/y plus their box's unscaled offset), closed? (vector), props? {node.set keys}, select? (default true)}
+    {type: rectangle|ellipse|polygon|star|line|arrow|vector|text|frame|section|component|slice, x?, y? (relative to the parent frame; groups don't count), width?, height?, parent? (id; default: the page), index?, name?, visible? (false hides the new layer), text? | characters? (for text), path? | points? (vector: SVG path data | [[x,y],..]; x/y move their own origin, so the layer's left/top is x/y plus their box's unscaled offset), closed? (vector), props? {node.set keys}, select? (default true)}
+node.createTree*  Create layer tree
+    {type, x?, y?, width?, height?, parent?, index?, name?, visible?, text?, path?, points?, closed?, props?, select?, as?, children?}: a layer (node.create keys) and, nested under it, the layers in `children` (an array of the same objects, each with its own `children`; their `parent` is the enclosing layer), created together; returns {id, refs: {<as>: id}, count}; the root becomes the selection (select: false to keep the selection)
 frame.create*  Create frame
     {preset? (name from FRAME_PRESETS), x?, y?, width?, height?, parent?, index?, name?, props?, select? (default true)} (a preset without x/y lands to the right of the page's frames)
 shape.rectangle*  Rectangle
@@ -38,7 +40,7 @@ edit.redo  Redo (Shift+Cmd+Z)
 edit.delete*  Delete (Delete)
     {ids?}
 edit.duplicate*  Duplicate (Cmd+D)
-    {ids?, dx?, dy? (page offset; default: the offset of the last duplicate when ids are its copies, still selected; else top-level frames to the right with a 100 gap, everything else in place), map? (true: also return `map`, each original layer's id, descendants included, → its copy's id)}  a main component's copy is an instance of it (a variant stays a new variant in its set)
+    {ids?, dx?, dy? (page offset; default: the offset of the last duplicate when ids are its copies, still selected; else top-level frames to the right with a 100 gap, everything else in place), map? (true: also return `map`, each original root's id → its copy's id), mapDepth? (levels below the roots to add to `map`: a number or "all"), mapNames? (names of descendants to add to `map`, at any depth)}  a main component's copy is an instance of it (a variant stays a new variant in its set)
 edit.copy  Copy (Cmd+C)
     {ids?}
 edit.cut*  Cut (Cmd+X)
@@ -128,7 +130,9 @@ layers.collapseAll  Collapse layers (Alt+L)
 node.set*  Set properties
     name, visible, locked, opacity (0-1 or "50%"), blend, x, y (relative to the parent frame; groups don't count), width, height, rotation (degrees), fills (paints or colours; gradients as {type: linearGradient|radialGradient|angularGradient|diamondGradient, stops: ["#hex", ...], from?, to?} too), fill (colour, {$var: variable id or name}, or "none"/null: no fill), strokes, stroke (colour, {$var: variable id or name}, or "none"/null: no stroke), strokeWeight, strokeAlign (inside|center|outside), strokeSides [t,r,b,l], strokeTopWeight / strokeRightWeight / strokeBottomWeight / strokeLeftWeight (one side; turns on individual strokes), strokeCap / startCap / endCap, strokeJoin, miterAngle (degrees: sharper joins bevel; or miterLimit as a ratio), dashes [..], dashCap (none|round|square; null: dashes take startCap and endCap), widthProfile (preset uniform|wedge|taper|eye|rounded|pinch, [[t, scale], ...] or null), brush (preset id, {preset, spacing, sizeJitter, rotationJitter, scatter, seed} or null), cornerRadius (n or [tl,tr,br,bl]), cornerSmoothing (0-1), effects, clip, isMask, layout (null|horizontal|vertical|grid|{...}), gap, crossGap, padding (n or [t,r,b,l]), paddingTop/Right/Bottom/Left, mainAlign (min|center|max, or the auto gaps spaceBetween|spaceAround|spaceEvenly), crossAlign (min|center|max|baseline: first text baselines, horizontal layouts), contentAlign (wrapped lines: auto = packed where crossAlign says | spaceBetween), wrap (rows of a horizontal layout, columns of a vertical one), strokesIncluded (the frame's inside stroke takes up space), reverseZ (canvas stacking: true = first on top), columnGap / rowGap (aliases of gap / crossGap), gridColumns, gridRows, columnTracks / rowTracks ([120 | "1fr" | "auto" | {sizing, value}]), gridColumn / gridRow (0-based cell anchor, null = auto), gridColumnSpan, gridRowSpan, gridAlignH / gridAlignV (a grid child's alignment in its cell: min|center|max, auto/null = the frame's), sizingH / sizingV (fixed|hug|fill), absolute (ignore auto layout; follows constraints), minWidth, maxWidth, minHeight, maxHeight (null removes), constraints {horizontal, vertical}, grids, exports, characters, fontFamily, fontStyle, fontSize, lineHeight (auto|px|"150%"), letterSpacing (px|"2%"), textAlign (left|center|right|justified), textAlignVertical, textAutoResize (widthAndHeight|height|none|truncate), textDecoration, textDecorationStyle (solid|dotted|wavy), textDecorationThickness / textDecorationOffset (auto|px|"10%" of the font size; the offset runs from the baseline down to an underline's top edge), textDecorationSkipInk (underlines break around descenders), textDecorationColor (colour, or auto/null: the text's), textCase (original|upper|lower|title|smallCaps), paragraphSpacing, paragraphIndent, listStyle (none|bulleted|numbered; with start/end: the paragraphs those chars touch), indentation (list nesting level 0-8, same range rule), listSpacing (px between list items, in place of paragraphSpacing), hangingPunctuation, hangingList (markers outside the box), leadingTrim (vertical trim: none|capHeight), maxLines, features ({tag: bool}, e.g. {"liga": false, "tnum": true}), fontVariations / variationSettings ({axis: number}, e.g. {"wght": 550, "wdth": 85}; null = none), path (a vector's SVG path data: replaces its geometry, keeping the layer, its paints, styles and bindings; width/height in the same call scale it as node.create does; its own box goes at the layer's x/y, or with x/y given, at x + its left edge and y + its top as node.create places it), pointCount, innerRadius, arcStart, arcSweep, arcInner, booleanOperation (a boolean group's operation, or an operand's own; null: the group's), operandOperation (a layer in a boolean group: how it combines with the operands below it; null: the group's), constrainProportions, description, interactions, overflow, pluginData {k: v}
 node.get  Get layer
-    {id, fields?: [node keys], outline?: bool (not with fields)}
+    {id, fields?: [node keys; "layout.gap" keeps part of an object], outline?: bool (not with fields), compact?: bool (leave out auto layout keys that do nothing in the layer's mode or sit at their default), layout?: false (leave out auto layout)}
+node.resolve  Resolve layer path
+    {root, path}: the id of the layer at `path` below `root`, layer names joined by `/` (exact, case-sensitive; `row[1]` picks the second of several siblings named row; `\/` is a slash in a name), e.g. {root: <instance id>, path: "footer/save/label"}; returns {id}; does not select
 node.find  Find layers
     {root? (strict descendants; default current page), name?, type? (canonical layer type), text?, component? (main component name), limit? (0-10000; default 100)}: every filter must match; name, text and component are case-insensitive substrings, type is exact (any case); returns {ids, total} and does not select
 node.reparent*  Move layer into
@@ -182,7 +186,7 @@ export.update*  Edit export setting
 export.remove*  Remove export setting
     {ids?, index}
 command.batch  Run several commands
-    {label?, onError?, commands: [{command, params, as?}]} (one undo step)
+    {label?, onError?, dryRun?, commands: [{command, params, as?}]} (one undo step; dryRun runs every step, reports the results and rolls everything back)
 edit.repeat*  Repeat last command
     {}
 fill.move*  Move fill
@@ -775,6 +779,8 @@ variable.bind*  Bind variable
     {ids?, field (fill|stroke (first paint)|fills/<i>/color|strokes/<i>/color|fills/<i>/stops/<j>/color (gradient stops)|effects/<i>/<offsetX|offsetY|radius|startRadius|spread|color>|layoutGrids/<i>/<size|count|gutter|offset>|componentProperties/<name> (instances: boolean/text properties; variant properties take string variables naming a value)|width|height|opacity (percent)|cornerRadius|gap|paddingHorizontal|characters|visible|fontSize…; list indices bottom first), variable (null unbinds)}
 variable.setMode*  Set variable mode
     {ids? (frames/page), collection, mode (id or name; null: Auto, inherited from the parent)}
+variable.cloneWithMode*  Clone with variable mode
+    {ids?, collection, mode (id or name), suffix? (default " (<mode>)" added to the copy's name), detach? (default true: a main component's copy, an instance, is detached into a frame), dx?, dy? (as edit.duplicate)}: duplicates each layer, detaches a copy that is an instance, renames it and sets the collection's mode on it, as one step; returns {ids, map: original → copy}
 variable.list  List variables
     {}
 image.adjust*  Adjust image

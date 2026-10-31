@@ -47,6 +47,17 @@ squeezed with a `$trimmed` marker. What this changes for this skill:
   (see the 0.13 list below) — read only the keys the question needs.
 - Bare `list_commands` is still uncapped upstream — rule 1 stands.
 
+## Post-0.13.1 additions (checkout `sergii/mcp-optimisations`, Nov 1 2026)
+
+The checkout is now 0.13.1 + 17 upstream commits with the digest commit
+rebased on top (`d97f98ce`; the hashes cited above predate the rebase).
+`command-catalog.md` was regenerated. New commands, headless-verified Nov 1
+2026 (not yet through the MCP app): `node.resolve`, `node.createTree`,
+`variable.cloneWithMode`, `batch {dryRun}`, `edit.duplicate {mapDepth,
+mapNames}`, dotted `node.get` `fields`, `$ref` in `component.create`. The
+running app must be on this build for them to exist — grep the catalog,
+and on "unknown command" fall back to the quirk's older route.
+
 ## 0.13 capabilities worth using (verified live Oct 31 2026, CLI/app 0.13.1 + digest rebase)
 
 Diffed against the 0.11.2 catalog; full list in the regenerated
@@ -255,7 +266,7 @@ of those results was replayed by each later turn at planner price (quirks
 - the session makes at most ~40 MCP calls in total, then hands the rest to an
   executor with a work order;
 - reads go only through `node.find` and zero-depth `get_node` (minimum
-  `fields`, quirk 34) — no tree reads, no Design System page reads (quirk 35);
+  `fields`, quirk 34; `node.resolve` for instance children, quirk 37) — no tree reads, no Design System page reads (quirk 35);
 - the planner still never reads images (planner rule 1).
 
 ## Building masters
@@ -263,7 +274,8 @@ of those results was replayed by each later turn at planner price (quirks
 - **New master recipe.** (1) Grep `references/inventory.md` first (reuse
   rules below). (2) Place it in the correct Design System section; widen
   the section if the master overflows it. (3) Create the Light master.
-  (4) Create the Dark twin (quirk 40). (5) Bind variables — Light and Dark
+  (4) Create the Dark twin (quirk 40; `variable.cloneWithMode` on newer
+  builds, then `component.create`). (5) Bind variables — Light and Dark
   should differ only through the Theme mode. (6) Update
   `designs/notes/design-system-structure.md` in the same pass, then re-run
   `scripts/dump-inventory.sh`.
