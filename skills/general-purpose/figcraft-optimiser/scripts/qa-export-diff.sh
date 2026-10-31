@@ -2,7 +2,7 @@
 # Diff exported FigCraft frames against @2x ground-truth captures.
 #
 # Usage: scripts/qa-export-diff.sh CAPTURES_DIR EXPORTS_DIR [THRESHOLD_PCT] [--artifacts [DIR]]
-#   CAPTURES_DIR  dir of @2x capture PNGs (e.g. design/screens/light/1440/)
+#   CAPTURES_DIR  dir of @2x capture PNGs (e.g. <captures-root>/light/1440/)
 #   EXPORTS_DIR   dir of scale-1 exports, named like the captures (stem match)
 #   THRESHOLD_PCT default 2.0 — frames above it are flagged FAIL
 #   --artifacts   for each FAILing frame, write a perceptual diff overlay and a
