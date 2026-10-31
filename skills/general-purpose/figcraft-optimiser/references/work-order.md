@@ -11,6 +11,12 @@ unknowns itself (via one targeted executor probe or the handover docs).
 ```markdown
 # Work order: <short title>
 
+## Scope (required — see SKILL.md "Scope gate")
+- Pages: <…> · Viewports: <…> · Themes: <…> · States: <…>
+- Count: <pages × viewports × themes × states> (over 8 or any axis
+  unspecified → confirmed with the user via AskUserQuestion first)
+- Confirmed by: <user in chat, date | NOT confirmed — do not build>
+
 ## Context
 - File: <absolute path to .figcraft> (already open / needs file.open)
 - Page: <name or id> · Target: <frame ids / region>

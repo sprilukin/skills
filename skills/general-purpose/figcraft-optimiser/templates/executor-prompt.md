@@ -29,6 +29,16 @@ genuinely impossible as written, stop and report it — do not improvise.
   twice. Resolve ids with `node.find {name?/type?/text?}` — not tree reads
   — and read nodes at the minimum `depth` AND minimum `fields`
   (`get_node {id, fields: [...]}`; `outline: true` for identity passes).
+- Read rules (quirks 34–37, 44): never request `layout`, `fills`,
+  `strokes` or `boundVariables` in a tree read — only with `depth: 0`/`1`
+  on one node (geometry: `["name","type","x","y","width","height"]`); never
+  read the Design System page at `depth >= 2`; pass `map:true` to
+  `edit.duplicate` only when you will use the child ids; grep
+  `<skill-dir>/references/inventory.md` for master names before looking
+  anything up in the document.
+- Master build recipe: follow SKILL.md "Building masters" (reuse by
+  override first; new master → right section, Light, Dark twin per quirk
+  40, bind variables, update the structure notes).
 - Turn budget: ≤<N> tool calls — count them as you go. At <N>−2:
   `save_file`, write the state file (below), and report progress. Do not
   drift past the budget; a fresh takeover beats a drifting worker.

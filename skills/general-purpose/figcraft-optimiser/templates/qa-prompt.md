@@ -18,9 +18,14 @@ You do not fix anything; you report findings as data.
   (`scripts/qa-export-diff.sh` wraps this).
 
 ## Procedure
-1. Run <skill-dir>/scripts/qa-export-diff.sh <captures-dir> <exports-dir>.
-   It handles the @2x downscale and prints a machine-readable table:
-   frame | diff% | worst regions.
+0. Setup: write a manifest (`FRAME_ID capture-stem` per line) and run
+   `bash <skill-dir>/scripts/qa-setup.sh <manifest> <theme> <viewport>`.
+   It creates the scratch `cap/` (symlinked captures) and `exp/` dirs and
+   prints the exact `export` calls and diff command — no hand-built
+   symlinks, no `mkdir -p`.
+1. Run the `export` calls it printed, then its `bash …/qa-export-diff.sh`
+   command. The diff handles the @2x downscale and prints a
+   machine-readable table: frame | diff% | worst regions.
 2. If the work order names a baseline SVG export for a frame, run
    <skill-dir>/scripts/svg-diff.sh <baseline.svg> <current.svg> and include
    the numeric change list in the report — it localises drift exactly

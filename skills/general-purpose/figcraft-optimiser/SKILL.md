@@ -117,6 +117,16 @@ Carried over from 0.11 (verified live Oct 2026, CLI 0.11.2):
   connector `curved` style, `widget.setText` / `widget.menu`.
 - **`.sketch` import** (48+, best effort) via `file.open` / `file.import`.
 
+## Scope gate (before any build)
+
+State the screen matrix — pages × viewports × themes × states — and its
+count before building or delegating anything. If the count is over 8, or
+any axis is unspecified, ask the user once with `AskUserQuestion`: which
+viewports, which themes, which states. Do not delegate measurement for an
+axis the user has not confirmed, and record who confirmed what in the work
+order's Scope block. Evidence: ~144k subagent tokens were spent measuring
+mobile and dark screens that were then dropped (Documents-screens retro).
+
 ## Roles
 
 - **Planner (smart model).** Never touches figcraft-app directly. Owns specs,
@@ -234,10 +244,45 @@ context in the run and has no QA worker behind it:
    remaining work is well-defined, propose spinning it into a work order
    for a cheap executor.
 
+## Interactive fast path (planner touching the MCP)
+
+Planner rule 4 says "stay out of the MCP"; real interactive sessions do not.
+The Documents-screens session exceeded rule 4: the planner context itself
+did the tree reads, `map:true` duplicates and source reads, so every one
+of those results was replayed by each later turn at planner price (quirks
+34–36, 44). Direct MCP use is acceptable only when:
+
+- the session makes at most ~40 MCP calls in total, then hands the rest to an
+  executor with a work order;
+- reads go only through `node.find` and zero-depth `get_node` (minimum
+  `fields`, quirk 34) — no tree reads, no Design System page reads (quirk 35);
+- the planner still never reads images (planner rule 1).
+
+## Building masters
+
+- **New master recipe.** (1) Grep `references/inventory.md` first (reuse
+  rules below). (2) Place it in the correct Design System section; widen
+  the section if the master overflows it. (3) Create the Light master.
+  (4) Create the Dark twin (quirk 40). (5) Bind variables — Light and Dark
+  should differ only through the Theme mode. (6) Update
+  `designs/notes/design-system-structure.md` in the same pass, then re-run
+  `scripts/dump-inventory.sh`.
+- **Prefer reuse by override.** Check the inventory for an existing master
+  before building. Resize an instance with a width override only when the
+  master is auto-layout (`FileDropzone/Light` became 720×118 and
+  `EmptyState/Light` 720 wide with no new master). Re-set heights after
+  hiding children (quirk 41).
+- **One flexible master over many near-duplicates.** A single `Dialog`
+  master with toggled layers (`field`, `description`, `preview`, `delete`,
+  `save`, `close`, `footer`) covered rename, delete and preview dialogs.
+  Bind the toggles with `component.bindProperty {field: "visible"}`
+  (quirk 7) instead of creating one master per variant.
+
 ## Core rules (all roles)
 
 1. **Cache before calling.** Read `references/command-catalog.md` with grep
-   instead of `list_commands`. Only re-list live with a `filter` when
+   instead of `list_commands`; grep `references/inventory.md` for master
+   names — do not read the Design System page. Only re-list live with a `filter` when
    `run_command` fails with unknown command.
 2. **Batch by default.** One `execute` call = one batch attempt. Compose
    multi-step trees with step references — never guess ids across turns.
@@ -297,13 +342,41 @@ master edits.
 | `references/work-order.md` | Work-order schema: steps, budgets, verification targets |
 | `templates/executor-prompt.md` | Spawn prompt for cheap executor workers |
 | `templates/qa-prompt.md` | Spawn prompt for cheap QA workers |
+| `references/inventory.md` | Generated list of Design System sections/components/sets (`name | type | section | W×H`, no ids) — grep, don't read the page |
+| `references/server-wishlist.md` | Asks for the FigCraft maintainers (not agent rules) |
 | `scripts/dump-commands.sh` | Regenerate the cached catalog |
+| `scripts/dump-inventory.sh` | Regenerate `references/inventory.md` headlessly from a `.figcraft` file |
+| `scripts/qa-setup.sh` | Build the QA scratch tree + capture symlinks from a `FRAME_ID capture-stem` manifest; prints the export calls and the diff command |
 | `scripts/qa-export-diff.sh` | Diff exports against captures (batch table; `--artifacts [DIR]` adds odiff overlays + side-by-side strips for FAILing frames) |
 | `scripts/svg-diff.sh` | Structural diff of two SVG exports: exact, id-localised numeric change list (regression checks after edits) |
 
 ## Refresh policy
 
+Re-run `scripts/dump-inventory.sh <file.figcraft>` (save the file in the app
+first — the CLI reads disk) after any pass that adds, renames, resizes or
+moves a master, and when the inventory header date is older than the last
+master change. Commit the regenerated file.
+
 Re-run `scripts/dump-commands.sh` after a FigCraft build update, or when a
 command id fails against the live app. Update `references/quirks.md` after
 any pass retro that finds a new behaviour — quirks are the highest-value
 cache: rediscovering one cost whole work orders.
+
+## Retro: Documents screens (Oct 31 2026)
+
+Interactive session, 5 desktop screens + 3 masters at ~0.3–0.6% diff. The
+build was fine; the waste was avoidable reads and unconfirmed scope.
+
+| Sink | Cost | Fix |
+| --- | --- | --- |
+| Mobile/dark measured then dropped | ~144k subagent tokens | Scope gate |
+| `fields` with `layout`/`fills` in a tree read | ~15k per read | quirk 34 |
+| Design System page at depth 2 | ~8k per read | quirk 35, `inventory.md` |
+| `map:true` duplicates, unused | ~80 entries per call | quirk 36 |
+| Batch failed on top-level `visible` | ~3k resend | quirks 38–39 |
+| JSX read incl. handlers/validation | ~1,000 lines | quirk 44 |
+| Planner using MCP directly | past planner rule 4 | Interactive fast path |
+| Hand-built QA symlink dirs | extra turns | `scripts/qa-setup.sh` |
+
+Recipes learned: quirks 40 (Dark twin), 42 (wrap), 41 (hidden children).
+Untested: Light instance inside a Dark frame (Suspected list).

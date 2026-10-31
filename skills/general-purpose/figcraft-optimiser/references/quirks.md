@@ -77,9 +77,6 @@ a quirk has cost whole work orders.
     map to CSS (`darker` → `plus-darker`), and it verifies the resolved
     scene graph, not rasterisation — font hinting and kerning still need
     the raster gate.
-13. **`scripts/qa-export-diff.sh` must run under `bash`,** not `sh`/zsh —
-    it uses a bashism around line 151 and dies under POSIX sh. Workers'
-    shells may default to zsh: invoke it as `bash scripts/qa-export-diff.sh …`.
 14. **`component.list` can come back `$trimmed` even with `maxBytes` raised**
     (95 components is enough). Grep the response for the names you need; the
     digest keeps ids, so a trimmed list is usable — just don't expect the
@@ -225,7 +222,66 @@ a quirk has cost whole work orders.
     path must take it from the state file or the work order, not from
     `doc.list`.
 
+33. **`scripts/qa-export-diff.sh` needs `bash`,** not `sh`/zsh — it uses a
+    bashism near the end and dies under POSIX sh. The script now re-execs
+    itself under bash and `scripts/qa-setup.sh` prints the command with an
+    explicit `bash` prefix; still write `bash scripts/…` in hand-made
+    commands.
+
+### Documents-screens retro additions (Oct 31 2026)
+
+Interactive session: 5 desktop screens + 3 masters at ~0.3–0.6% diff.
+Verified live Oct 31 2026 unless marked otherwise; token numbers are that
+session's measurements.
+
+34. **`get_node {fields}` projection is top-level only.** Asking for
+    `layout`/`fills` returns the full nested object on every descendant —
+    a 22-child frame at depth 2 cost ~15k tokens. Never request `layout`,
+    `fills`, `strokes` or `boundVariables` in a tree read; use them only
+    with `depth: 0`/`1` on one node. Geometry:
+    `["name","type","x","y","width","height"]`.
+35. **Never read the Design System page at `depth >= 2`** (~200 masters;
+    depth 2 cost ~8k tokens). Grep `references/inventory.md`, or
+    `node.find {root: <section>, name}`. `depth: 1` of one section is fine.
+36. **`edit.duplicate {map:true}` on a frame maps every descendant** (~80
+    entries per call, unused). Pass `map:true` only when you will use the
+    child ids; otherwise `node.find {root}` afterwards.
+37. **Instance child ids follow the master**, with a constant id offset
+    per instance — valid only for instances created in one batch, fragile
+    if the master is edited. Prefer `node.find {root: <instance>, name}`;
+    record the id map in the state file.
+38. **`node.create` takes `visible` only inside `props`.** A top-level
+    `visible` fails the whole batch ("unknown parameter"); a failure at
+    step 8 of 21 cost a ~3k-token resend.
+39. **`component.create` / `component.detach` take literal ids, not
+    `{$ref}`.** Create the node in one batch, call `component.create` in
+    the next.
+40. **Recipe — Dark twin of a component.** `edit.duplicate {ids:[masterId],
+    map:true}` (gives an instance) → `component.detach` →
+    `component.create` → `node.set {name, x, y}` → `variable.setMode
+    {collection:"Theme", mode:"Dark"}` → fix remaining literal
+    (non-variable) fills by id. The `map` is what finds the literal-fill
+    ids. Verified on the row and dialog masters.
+41. **Hidden children in auto layout can leave an instance at the
+    master's height.** Re-set the height explicitly (`EmptyState` after
+    its button was hidden).
+42. **Auto-layout wrap needs three settings** (extends quirk 9):
+    `sizingH: "fill"` on the parent frame, plus `sizingH: "fill"` and
+    `textAutoResize: "height"` on the text — hidden text layers too. The
+    dialog description rendered 880px wide until all three were set.
+43. **Cost: `get_node` on a page with many top-level children.**
+    `inspect_document {depth:1}` already dumps every child of the current
+    page (~3k tokens). Prefer `node.find` with a `type` filter.
+44. **Cost: reading source for design extraction.** Read only the render
+    (JSX) and class-token sections. State handlers, validation and
+    server-action code have no visual effect and were most of the ~1,000
+    lines read.
+
 ## Suspected (verify before relying)
+
+- **A Light instance inside a frame set to Dark mode** (untested, do not
+  rely on it). The test was interrupted by a scope change. If tested: one
+  duplicated frame set to Dark plus one export is enough.
 
 - **A literal fill overwrite may strip a variable binding.** In one
   interactive pass (round-3 retro), "closure reason colours are broken"

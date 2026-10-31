@@ -15,6 +15,9 @@
 #
 # Requires ImageMagick (`magick` or `compare`) with a Python/PIL fallback.
 
+# Re-exec under bash if started from sh/zsh (it uses bashisms).
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
+
 set -euo pipefail
 
 CAP=""
