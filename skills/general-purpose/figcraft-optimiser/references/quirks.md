@@ -5,13 +5,23 @@ a quirk has cost whole work orders.
 
 ## Engine quirks (behaviour verified in practice)
 
-1. **Batch failures are atomic on 0.11.2 — re-verified.** Pass-2-era
+> Verified against 0.11.x unless noted; the engine moved to 0.13.1 (+ M0.9
+> digest rebase) in Oct 2026. The pre-0.13 findings below are expected to
+> hold but spot-check the geometry/instance ones (#2–#5, #19, #24) on the
+> first pass that touches them, and record any drift here.
+
+1. **Batch failures are atomic (verified 0.11.2).** Pass-2-era
    behaviour (a guard refusal kept steps before and after the refused one)
-   no longer reproduces: on 0.11.2 both hard errors ("no such node") and
+   no longer reproduces: both hard errors ("no such node") and
    guard refusals roll the whole batch back. Note for scripted workers: a
    guard refusal throws OUT of the batch call as an exception, so prior
    steps' results are lost from the script's view even though nothing
    committed — catch it, and never re-run a batch blind after an error.
+   0.13 adds `onError: "continue"` on the batch call: a failed step is
+   then reported per step instead of throwing, and failed steps' earlier
+   work is still rolled back per the docs — use it for batches over many
+   independent nodes, keep the default `abort` when steps depend on each
+   other. Re-verify the `continue` rollback semantics on first use.
 2. **Geometry overrides inside instances are partial.** Docs refuse all
    geometry of layers inside instances; on 0.11.2 padding, width/height,
    fills, visibility and characters override fine, but **both `x` and `y`
@@ -166,6 +176,55 @@ a quirk has cost whole work orders.
     and the node gets the engine default (#D9D9D9). Paints must go through
     `props: {fill: ...}` (or a follow-up `fill.set`).
 
+26. **A root frame's own dropShadow expands the export canvas — clip doesn't
+    help.** Pass-15 fix round: two mobile frames exported at 519×956 while the
+    tree read 375×812 / clip=true / all children in-bounds. Cause: the root
+    carried a desktop master's dropShadow (radius 48) inherited through
+    duplicate → detach; `export` includes effects by default
+    (`includeBoundingBox: false` means shadows IN), so the canvas grew by the
+    blur margin (144px). The SVG header (`<svg width=… height=…>`) and PNG dims
+    name it without any image read. `clip` constrains children, never the
+    frame's own effect. Full-bleed sheets must carry NO root shadow after a
+    master detach; QA symptom is a fixed-size canvas blowup, not a diff
+    pattern.
+
+27. **`node.create` props rejects `lineHeight: {px: n}`** ("auto | px |
+    \"150%\"") — the batch fails atomically. Create first, then set
+    `lineHeight` via `set_properties`, where a bare number means px
+    (pass 15).
+28. **`variable.list` output digests to ~3 elements even with `maxBytes`
+    raised** (unlike `component.list`, which keeps ids). Resolve variable
+    ids from `notes/variables.md` or an already-verified binding on a
+    sibling node instead of re-listing (pass 15). Since 0.13 you can often
+    skip id resolution entirely: `node.set` fills/strokes accept
+    `{$var: "Variable Name"}` directly — verify the binding stuck on one
+    node before batch-binding a set.
+29. **Duplication semantics:** `edit.duplicate` of a COMPONENT creates an
+    instance; `component.detach` keeps the child ids in place;
+    `edit.duplicate` of a detached frame is a full independent copy.
+    Also: `node.set` has no `index` key — pass the index to
+    `node.reparent` (pass 15). Since 0.13, `edit.duplicate {map: true}`
+    also returns an original→copy id map — never re-find duplicated ids.
+
+30. **`node.find` replaces tree scans (verified live 0.13.1).**
+    `node.find {name?, type?, text?, component?, root?, limit?}` returns
+    `{ids, total}` in one cheap call — use it for every "find the layer
+    named X" need instead of paging `inspect_document` at depth 4, and as
+    the worker's initial id map (rule 4). It does not select.
+
+31. **`node.get` takes a `fields` projection (verified live 0.13.1).**
+    `fields: ["name", "width", "height"]` drops paints and text props on
+    every returned layer; `fields: []` keeps ids + structure only;
+    `outline: true` is the preset for identity passes (`characters` cut at
+    120 chars). Unknown keys error with the valid list, so a typo costs
+    one retry, not a flood. Minimum `depth` AND minimum `fields` from now
+    on.
+
+32. **`doc.list` no longer returns file paths to AI agents** (0.13,
+    #1117): `path` is only for the user's own scripts. Workers that need a
+    path must take it from the state file or the work order, not from
+    `doc.list`.
+
 ## Suspected (verify before relying)
 
 - **A literal fill overwrite may strip a variable binding.** In one
@@ -192,7 +251,9 @@ a quirk has cost whole work orders.
 - **`get_node` / `inspect_document` still default to an 8 MiB budget** —
   the digest does not cover tree tools. Fetch with the minimum `depth`
   that answers the question (a page listing needs `depth: 1`), and never
-  fetch the same node id twice.
+  fetch the same node id twice. Since 0.13 also fetch with the minimum
+  `fields` (`get_node {fields: [...]}`, quirk 31) or use `node.find`
+  (quirk 30) — an id lookup should never need a tree read at all.
 - **`list_commands` without a filter dumps ≈1200 commands (≈50k chars).**
   Use the cached catalog (`references/command-catalog.md`), or
   `list_commands {filter: "keyword"}`.

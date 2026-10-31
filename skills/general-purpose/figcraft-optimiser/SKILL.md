@@ -23,15 +23,17 @@ one orchestrator session held 90% of a run's cost (466 turns × 221M
 cache-read tokens) by doing visual QA itself and re-spawning workers in a
 loop. The planner rules below exist because of that.
 
-## Server-side digesting (merged upstream as M0.9, Oct 2026)
+## Server-side digesting (M0.9, Oct 2026)
 
 Result digesting first shipped in the side build `sergii/mcp-optimisations`
-(commit `98ecb072`) and is now merged upstream (M0.9, commit `50ed6368`,
-verified live on CLI/app 0.11.2). Reference: `docs/mcp.md` → "Digesting
-command results". It digests `run_command`, `batch`, `create_node` and
-`set_properties` echoes to a 4 KiB budget by default. Most results are
-unchanged; large ones come back squeezed with a `$trimmed` marker. What
-this changes for this skill:
+(commit `98ecb072`, then `50ed6368`). It is **not merged upstream**: the
+fix lives on that side branch as commit `bc12c546`, rebased onto 0.13.1 —
+after every upstream update the branch must rebase it back on (done Oct 31
+2026, verified live: `run_command {maxBytes: 1024}` returns `$trimmed`).
+Reference: `docs/mcp.md` → "Digesting command results". It digests
+`run_command`, `batch`, `create_node` and `set_properties` echoes to a
+4 KiB budget by default. Most results are unchanged; large ones come back
+squeezed with a `$trimmed` marker. What this changes for this skill:
 
 - Blanket result projection is no longer a *size* rule — the server
   handles size. Projection is now about relevance only (rule 3).
@@ -40,13 +42,52 @@ this changes for this skill:
   `full: true` or `maxBytes: n` (min 1024) on `run_command`/`batch`.
 - Errors, strings and numbers are never digested.
 - Tree tools (`inspect_document` / `get_node`) are untouched (8 MiB
-  default) — minimum-`depth` reads still matter (rule 4).
+  default) — minimum-`depth` reads still matter (rule 4), and since 0.13
+  `get_node` also takes a `fields: [...]` projection and `outline: true`
+  (see the 0.13 list below) — read only the keys the question needs.
 - Bare `list_commands` is still uncapped upstream — rule 1 stands.
 
-## 0.11 capabilities worth using (verified live Oct 2026, CLI 0.11.2)
+## 0.13 capabilities worth using (verified live Oct 31 2026, CLI/app 0.13.1 + digest rebase)
 
-Diffed against the 0.10 catalog; full list in the regenerated
+Diffed against the 0.11.2 catalog; full list in the regenerated
 `references/command-catalog.md`.
+
+- **`node.get {fields: ["name", "width", …]}`** — exact top-level node
+  keys, applied to every layer; `fields: []` keeps only ids and structure;
+  `outline: true` selects `id, name, type, characters (cut at 120),
+  mainComponentName, visible` plus structure. Not combinable with each
+  other (`outline: false` is fine). This is the cheap tree read: minimum
+  `depth` AND minimum `fields` (rule 4).
+- **`node.find {name?, type?, text?, component?, root?, limit?}`** —
+  cheap id lookup by case-insensitive substring / exact type, returns
+  `{ids, total}` without selecting or reading a tree. Replaces most
+  scan-the-page `inspect_document` probes and gives workers the id map
+  rule 4 asks for in one call.
+- **`batch {onError?: "abort" (default) | "continue"}`** — with
+  `continue`, a failed step no longer throws out of the call: failures are
+  reported per step. Quirk #1's catch-and-lose-steps behaviour only
+  applies to the default `abort`. Use `continue` for long batches over
+  many independent nodes; keep `abort` when steps depend on each other.
+- **`edit.duplicate {map: true}`** — also returns an original→copy id map
+  (descendants included). Feeds rule 4's id maps directly; never re-find
+  duplicated ids.
+- **`node.set` fill/stroke accept `{$var: variable id or name}`** and
+  opacity accepts `"50%"` — bind by name without resolving ids first
+  (weakens quirk 28's workaround; verify the binding stuck on
+  variable-bound nodes).
+- **Creators take `index?`, `name?`, `select?`** (`node.create`, shapes,
+  `frame.create`, `text.create`, `image.create {name?}`) — set position in
+  z-order and a useful name at creation instead of a follow-up
+  `set_properties`/`node.reparent`.
+- **`comment.prompt {ids?, page?, filter?}`** — copies threads as
+  AI-readable text in one call; the entry point for the comment-fixing
+  workflow.
+- **`export` documents its flags directly**: `contentsOnly?`,
+  `includeBoundingBox?` (cuts shadows/outside strokes — quirk 26),
+  `svgOutlineText?`, `svgSimplifyStroke?`, `svgIdAttribute?` — the QA
+  flags are now first-class on `export`, not only `file.exportAssets`.
+
+Carried over from 0.11 (verified live Oct 2026, CLI 0.11.2):
 
 - **`variable.export {format: "tailwind"}`** — a Tailwind v4 `@theme`
   stylesheet from the variable collections (plus `dart`). Direct route for
@@ -202,8 +243,9 @@ context in the run and has no QA worker behind it:
    multi-step trees with step references — never guess ids across turns.
    Name a step with `as` and use `{"$ref": "name"}` (or `{"$step": n}` with
    `field: "ids/0"` for list items) in later steps; see quirks #11 and the
-   0.11 note. The batch shape is `{commands: [{command, params}], label}` —
-   the key is `params`, not `args`.
+   0.11 note. The batch shape is `{commands: [{command, params}], label?,
+   onError?}` — the key is `params`, not `args`; `onError: "continue"`
+   reports a failed step instead of throwing out of the call (quirk #1).
 3. **Project for relevance, not size.** The server digests big
    `run_command` / `batch` / `create_node` / `set_properties` echoes to
    4 KiB by default (`$trimmed` names what went; `full: true` or
@@ -238,11 +280,13 @@ context in the run and has no QA worker behind it:
 ## Quirks
 
 Engine quirks and known failure modes live in `references/quirks.md` — read
-it before writing any batch. Highlights: batches are atomic on 0.11.2 but a
-guard refusal throws out of the call (catch it); geometry overrides inside
-instances are partial (position is refused, size/fills work); `node.set` x/y
-silently no-ops on auto-layout children; master geometry changes may not
-reach existing instances — spot-check after master edits.
+it before writing any batch. Highlights: batches are atomic but under the default
+`onError: "abort"` a guard refusal throws out of the call (catch it, or
+pass `onError: "continue"` for independent steps — 0.13); geometry
+overrides inside instances are partial (position is refused, size/fills
+work); `node.set` x/y silently no-ops on auto-layout children; master
+geometry changes may not reach existing instances — spot-check after
+master edits.
 
 ## Files
 

@@ -26,7 +26,9 @@ genuinely impossible as written, stop and report it — do not improvise.
   fields the work order's digest requires; never fetch the same node id
   twice.
 - Keep a local map of id → what you know. Never fetch the same node id
-  twice.
+  twice. Resolve ids with `node.find {name?/type?/text?}` — not tree reads
+  — and read nodes at the minimum `depth` AND minimum `fields`
+  (`get_node {id, fields: [...]}`; `outline: true` for identity passes).
 - Turn budget: ≤<N> tool calls — count them as you go. At <N>−2:
   `save_file`, write the state file (below), and report progress. Do not
   drift past the budget; a fresh takeover beats a drifting worker.
