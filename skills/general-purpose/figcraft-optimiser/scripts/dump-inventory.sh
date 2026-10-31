@@ -96,7 +96,7 @@ lines.sort(key=lambda x: (x[2] == "—" and 0 or 1, x[2], x[1] != "COMPONENT_SET
 
 with open(out, "w") as f:
     f.write("# Design System inventory (generated)\n\n")
-    f.write(f"Generated: {datetime.date.today().isoformat()} · Source file: {'/'.join(file.split('/')[-2:])}\n")
+    f.write(f"Generated: {datetime.date.today().isoformat()}\n")
     f.write("Regenerate: scripts/dump-inventory.sh (see SKILL.md). Grep this file for "
             "master names; do NOT read the Design System page. No ids — they change on "
             "reopen; resolve with `node.find {root: <section>, name}`.\n\n")

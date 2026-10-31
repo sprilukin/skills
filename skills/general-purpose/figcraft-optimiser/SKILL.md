@@ -128,6 +128,16 @@ Carried over from 0.11 (verified live Oct 2026, CLI 0.11.2):
   connector `curved` style, `widget.setText` / `widget.menu`.
 - **`.sketch` import** (48+, best effort) via `file.open` / `file.import`.
 
+## Step 0: project guide (before the first MCP call)
+
+Before the first call to figcraft-app, find and read the project's own
+agent-instructions file that governs the design file. Resolve it in order:
+(a) a path given in the project profile or config, if one exists; (b) the
+nearest agent-instructions file in the design file's folder, then its
+parent folders; (c) the project root's file. If several apply, the closest
+one wins. If none is found, say so and continue. A project may enforce this
+with a hook, but never assume one exists — read the file yourself.
+
 ## Scope gate (before any build)
 
 State the screen matrix — pages × viewports × themes × states — and its
@@ -136,7 +146,7 @@ any axis is unspecified, ask the user once with `AskUserQuestion`: which
 viewports, which themes, which states. Do not delegate measurement for an
 axis the user has not confirmed, and record who confirmed what in the work
 order's Scope block. Evidence: ~144k subagent tokens were spent measuring
-mobile and dark screens that were then dropped (Documents-screens retro).
+mobile and dark screens that were then dropped (past retro).
 
 ## Roles
 
@@ -198,8 +208,8 @@ geometry; image evidence is the last resort. Escalate one level only when
 the level below cannot answer the question:
 
 1. **Code + FigCraft variables.** Colors, radii, fonts, spacing, text
-   content, component anatomy. `globals.css` and the bound Theme
-   collection (`design/notes/variables.md`) share the same values, so
+   content, component anatomy. the project's style source and the bound
+   variable collection (its notes are named in the project guide) share the same values, so
    color drift between code and design is structurally impossible — never
    verify a token with pixels.
 2. **Tree reads.** `get_node` at minimum `depth`, compared against the
@@ -245,7 +255,7 @@ context in the run and has no QA worker behind it:
    check (`qa-export-diff.sh` on the affected frames) and report the
    verdict with your change. The user must never be the QA worker
    (measured: one interactive session produced three breakages that the
-   user found manually — "you broken all the kanban cards").
+   user found manually — "you broken all the cards").
 3. **Fix the master, not the instances.** A defect shared by many
    instances is a master fix. Per-instance edits drift — one interactive
    pass left some cards shorter than others.
@@ -258,7 +268,7 @@ context in the run and has no QA worker behind it:
 ## Interactive fast path (planner touching the MCP)
 
 Planner rule 4 says "stay out of the MCP"; real interactive sessions do not.
-The Documents-screens session exceeded rule 4: the planner context itself
+A past interactive session exceeded rule 4: the planner context itself
 did the tree reads, `map:true` duplicates and source reads, so every one
 of those results was replayed by each later turn at planner price (quirks
 34–36, 44). Direct MCP use is acceptable only when:
@@ -277,14 +287,14 @@ of those results was replayed by each later turn at planner price (quirks
   (4) Create the Dark twin (quirk 40; `variable.cloneWithMode` on newer
   builds, then `component.create`). (5) Bind variables — Light and Dark
   should differ only through the Theme mode. (6) Update
-  `designs/notes/design-system-structure.md` in the same pass, then re-run
+  the project's design-system structure notes in the same pass, then re-run
   `scripts/dump-inventory.sh`.
 - **Prefer reuse by override.** Check the inventory for an existing master
   before building. Resize an instance with a width override only when the
-  master is auto-layout (`FileDropzone/Light` became 720×118 and
-  `EmptyState/Light` 720 wide with no new master). Re-set heights after
+  master is auto-layout (a dropzone master became 720×118 and an
+  empty-state master 720 wide with no new master). Re-set heights after
   hiding children (quirk 41).
-- **One flexible master over many near-duplicates.** A single `Dialog`
+- **One flexible master over many near-duplicates.** A single dialog
   master with toggled layers (`field`, `description`, `preview`, `delete`,
   `save`, `close`, `footer`) covered rename, delete and preview dialogs.
   Bind the toggles with `component.bindProperty {field: "visible"}`
@@ -310,7 +320,7 @@ of those results was replayed by each later turn at planner price (quirks
    the fields the work order asks for — but don't project to survive
    floods that no longer happen.
 4. **Read once, remember.** Store node id maps and geometry in the session
-   state file (handover or `design/notes/*.md`). Never fetch the same node
+   state file (handover or the project's notes). Never fetch the same node
    id twice in one worker. Fetch with the minimum `depth` that answers the
    question (a page listing needs `depth: 1`, not the default 4).
 5. **Turn budget — count it, don't estimate it.** Executors: ≤40 tool
@@ -374,7 +384,7 @@ command id fails against the live app. Update `references/quirks.md` after
 any pass retro that finds a new behaviour — quirks are the highest-value
 cache: rediscovering one cost whole work orders.
 
-## Retro: Documents screens (Oct 31 2026)
+## Retro: interactive screens pass (Oct 31 2026)
 
 Interactive session, 5 desktop screens + 3 masters at ~0.3–0.6% diff. The
 build was fine; the waste was avoidable reads and unconfirmed scope.

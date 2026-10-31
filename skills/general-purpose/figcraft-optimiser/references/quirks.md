@@ -97,8 +97,8 @@ a quirk has cost whole work orders.
     and edge-weighted buckets means check the root frame's own fill first.
 
 17. **A stroked rounded frame feathers its clipped children near the corner
-    arcs.** Pass 9: a kanban card master with an inside 1px stroke rendered
-    its absolute `interest-strip` child with a constant ~13px soft inset at
+    arcs.** Pass 9: a board card master with an inside 1px stroke rendered
+    its absolute `accent-strip` child with a constant ~13px soft inset at
     top and bottom (constant regardless of card height — 34/62/100-tall test
     cards all inset 13px; width/gap/padding/height/sizing/variables innocent;
     square corners and `strokesIncluded: false` innocent). The renderer gives
@@ -129,10 +129,10 @@ a quirk has cost whole work orders.
     corner arcs with a constant ~13px soft inset at top and bottom,
     regardless of card height (34/62/100-tall all inset 13px). The topmost
     arc-overlapping node renders crisp; z-order decides who eats the halo.
-    Verified-clean anatomy for the kanban card: card frame unstroked
+    Verified-clean anatomy for the board card: card frame unstroked
     (`stroke: null`), then bottom→top: `hairline-border` absolute child
     (fills [], stroke hairline var, radius var, constraints
-    leftRight/topBottom), then `interest-strip`, then content. Filled-path
+    leftRight/topBottom), then `accent-strip`, then content. Filled-path
     rings behave the same as stroked ones; square-corner strokes do not
     halo; `strokesIncluded: false` does not help. Do not trust a render
     across unrelated edits — re-export after every structural change and
@@ -162,7 +162,7 @@ a quirk has cost whole work orders.
 
 24. **Editing a master child in place preserves instance overrides;
     deleting/recreating it drops them.** Pass 14: resizing + re-binding the
-    masters' `interest-strip` child kept every per-instance fill override
+    masters' `accent-strip` child kept every per-instance fill override
     (28 across the board frames) because the node id never changed. A
     delete + re-create would have silently stripped them all. Prefer
     in-place mutation of master children over structural replacement when
@@ -191,7 +191,7 @@ a quirk has cost whole work orders.
     (pass 15).
 28. **`variable.list` output digests to ~3 elements even with `maxBytes`
     raised** (unlike `component.list`, which keeps ids). Resolve variable
-    ids from `notes/variables.md` or an already-verified binding on a
+    ids from the project's variables notes or an already-verified binding on a
     sibling node instead of re-listing (pass 15). Since 0.13 you can often
     skip id resolution entirely: `node.set` fills/strokes accept
     `{$var: "Variable Name"}` directly — verify the binding stuck on one
@@ -228,13 +228,13 @@ a quirk has cost whole work orders.
     explicit `bash` prefix; still write `bash scripts/…` in hand-made
     commands.
 
-### Documents-screens retro additions (Oct 31 2026)
+### Interactive-pass retro additions (Oct 31 2026)
 
 Interactive session: 5 desktop screens + 3 masters at ~0.3–0.6% diff.
 Verified live Oct 31 2026 unless marked otherwise; token numbers are that
 session's measurements.
 
-34. **`get_node {fields}` projection is top-level only.** Asking for
+34. **`get_node {fields}` projection is top-level only.** Asking for [verified]
     `layout`/`fills` returns the full nested object on every descendant —
     a 22-child frame at depth 2 cost ~15k tokens. Never request `layout`,
     `fills`, `strokes` or `boundVariables` in a tree read; use them only
@@ -245,31 +245,31 @@ session's measurements.
     layout; the MCP `get_node` tool schema may still list top-level keys
     only — use `run_command node.get` for those. `compact: true` was
     accepted but its effect was not confirmed.
-35. **Never read the Design System page at `depth >= 2`** (~200 masters;
+35. **Never read the Design System page at `depth >= 2`** (~200 masters; [verified]
     depth 2 cost ~8k tokens). Grep `references/inventory.md`, or
     `node.find {root: <section>, name}`. `depth: 1` of one section is fine.
-36. **`edit.duplicate {map:true}` maps every descendant on older builds**
+36. **`edit.duplicate {map:true}` maps every descendant on older builds** [verified]
     (~80 entries per call, unused). Newer builds (verified headless Nov 1
     2026) map roots only by default; opt in with `mapDepth: n | "all"` or
     `mapNames: ["label"]`. Pass them only when you will use the ids.
-37. **Instance child ids follow the master**, with a constant id offset
+37. **Instance child ids follow the master**, with a constant id offset [verified]
     per instance — valid only for instances created in one batch, fragile
     if the master is edited. Prefer `node.find {root: <instance>, name}`;
     record the id map in the state file. Newer builds: `node.resolve {root,
     path: "footer/save/label"}` returns the id by layer-name path
     (verified headless Nov 1 2026) — prefer it to arithmetic.
-38. **`node.create` takes `visible` only inside `props`.** A top-level
+38. **`node.create` takes `visible` only inside `props`.** A top-level [verified]
     `visible` fails the whole batch ("unknown parameter"); a failure at
     step 8 of 21 cost a ~3k-token resend. Newer builds document a
     top-level `visible` on `node.create`; `batch {dryRun: true}` runs every
     step, returns the results and rolls back (verified headless Nov 1
     2026) — dry-run long batches first.
-39. **`component.create` / `component.detach` take literal ids, not
+39. **`component.create` / `component.detach` take literal ids, not [verified]
     `{$ref}`** on older builds: create the node in one batch, call
     `component.create` in the next. Newer builds accept `{"$ref": name,
     "field": "id"}` (with `as` on the step, not in `params`) — verified
     headless Nov 1 2026.
-40. **Recipe — Dark twin of a component.** `edit.duplicate {ids:[masterId],
+40. **Recipe — Dark twin of a component.** `edit.duplicate {ids:[masterId], [verified]
     map:true}` (gives an instance) → `component.detach` →
     `component.create` → `node.set {name, x, y}` → `variable.setMode
     {collection:"Theme", mode:"Dark"}` → fix remaining literal
@@ -282,28 +282,28 @@ session's measurements.
     (verified headless Nov 1 2026). `node.createTree {…, children, as}`
     builds a whole subtree in one step (its `refs` stayed empty when only
     the root had `as`).
-41. **Hidden children in auto layout can leave an instance at the
-    master's height.** Re-set the height explicitly (`EmptyState` after
+41. **Hidden children in auto layout can leave an instance at the [verified]
+    master's height.** Re-set the height explicitly (an empty-state master after
     its button was hidden).
-42. **Auto-layout wrap needs three settings** (extends quirk 9):
+42. **Auto-layout wrap needs three settings** (extends quirk 9): [verified]
     `sizingH: "fill"` on the parent frame, plus `sizingH: "fill"` and
     `textAutoResize: "height"` on the text — hidden text layers too. The
     dialog description rendered 880px wide until all three were set.
-43. **Cost: `get_node` on a page with many top-level children.**
+43. **Cost: `get_node` on a page with many top-level children.** [verified]
     `inspect_document {depth:1}` already dumps every child of the current
     page (~3k tokens). Prefer `node.find` with a `type` filter.
-44. **Cost: reading source for design extraction.** Read only the render
+44. **Cost: reading source for design extraction.** Read only the render [verified]
     (JSX) and class-token sections. State handlers, validation and
     server-action code have no visual effect and were most of the ~1,000
     lines read.
 
 ## Suspected (verify before relying)
 
-- **A Light instance inside a frame set to Dark mode** (untested, do not
+- **A Light instance inside a frame set to Dark mode** (untested, do not [suspected]
   rely on it). The test was interrupted by a scope change. If tested: one
   duplicated frame set to Dark plus one export is enough.
 
-- **A literal fill overwrite may strip a variable binding.** In one
+- **A literal fill overwrite may strip a variable binding.** In one [suspected]
   interactive pass (round-3 retro), "closure reason colours are broken"
   appeared after fill edits on variable-bound nodes. Hypothesis: setting a
   literal hex fill on a node bound to a Theme variable replaces the

@@ -1,7 +1,7 @@
 # FigCraft server wishlist
 
 Asks for the FigCraft maintainers — not agent rules. Collected from the
-Documents-screens retro (Oct 2026). Re-checked Nov 1 2026 against the
+an interactive-pass retro (Oct 2026). Re-checked Nov 1 2026 against the
 checkout at 0.13.1 + 17 commits (headless CLI): items 1–6 shipped.
 
 ## Shipped (use them; see quirks 34–40)

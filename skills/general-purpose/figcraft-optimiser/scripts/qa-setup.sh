@@ -7,7 +7,7 @@
 #   THEME          e.g. light | dark
 #   VIEWPORT       e.g. 1440 | 375
 #   SCRATCH_DIR    default: a fresh mktemp dir
-#   CAPTURES_ROOT  default: design/screens (captures live in ROOT/THEME/VIEWPORT/)
+#   CAPTURES_ROOT  default: captures (captures live in ROOT/THEME/VIEWPORT/)
 #
 # Creates SCRATCH/cap/ (symlinks to the captures) and SCRATCH/exp/ (empty:
 # `export` fails if the directory is missing), then prints one `export` call
@@ -18,7 +18,7 @@ set -euo pipefail
 [[ $# -ge 3 ]] || { echo "usage: qa-setup.sh MANIFEST THEME VIEWPORT [SCRATCH_DIR] [CAPTURES_ROOT]" >&2; exit 2; }
 MANIFEST="$1"; THEME="$2"; VIEWPORT="$3"
 SCRATCH="${4:-$(mktemp -d)}"
-ROOT="${5:-design/screens}"
+ROOT="${5:-captures}"
 SRC="$(cd "$ROOT/$THEME/$VIEWPORT" 2>/dev/null && pwd)" || { echo "captures dir not found: $ROOT/$THEME/$VIEWPORT" >&2; exit 1; }
 [[ -f "$MANIFEST" ]] || { echo "manifest not found: $MANIFEST" >&2; exit 1; }
 HERE="$(cd "$(dirname "$0")" && pwd)"

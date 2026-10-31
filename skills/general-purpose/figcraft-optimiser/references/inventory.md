@@ -1,6 +1,6 @@
 # Design System inventory (generated)
 
-Generated: 2026-10-31 · Source file: design/designs.figcraft
+Generated: 2026-11-01
 Regenerate: scripts/dump-inventory.sh (see SKILL.md). Grep this file for master names; do NOT read the Design System page. No ids — they change on reopen; resolve with `node.find {root: <section>, name}`.
 
 name | type | section | width×height

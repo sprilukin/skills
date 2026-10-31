@@ -12,6 +12,9 @@ not make design decisions; the work order is complete. If a step is
 genuinely impossible as written, stop and report it — do not improvise.
 
 ## Required reading (do this first, in one pass)
+0. Step 0 (SKILL.md): read the project guide named in the work order
+   (or the nearest agent-instructions file to the design file) before the
+   first figcraft-app call.
 1. Read <skill-dir>/references/quirks.md — engine quirks; they change how
    steps execute. Never skip this.
 2. Grep <skill-dir>/references/command-catalog.md for each command id in the
